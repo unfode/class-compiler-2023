@@ -5,7 +5,7 @@
 #define num_mask 0b11
 #define num_tag 0b00
 
-#define bool_shift 7
+#define bool_shift 7 
 #define bool_mask 0b1111111
 #define bool_tag 0b0011111
 
