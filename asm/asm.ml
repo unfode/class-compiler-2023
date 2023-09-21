@@ -1,6 +1,7 @@
 type register = Rax | Rcx | R8 | Rsp | Rdi
 
-let string_of_register ?(last_byte = false) (reg : register) : string =
+let string_of_register ?(last_byte = false) (reg : register) : string
+    =
   match (reg, last_byte) with
   | Rax, false ->
       "rax"
@@ -23,7 +24,31 @@ let string_of_register ?(last_byte = false) (reg : register) : string =
   | Rdi, false ->
       "rdi"
 
-type operand = Reg of register | Imm of int | MemOffset of (operand * operand)
+let num_shift = 2
+
+let num_mask = 0b11
+
+let num_tag = 0b00
+
+let bool_shift = 7
+
+let bool_mask = 0b1111111
+
+let bool_tag = 0b0011111
+
+type immediate = Bool of bool | Int of int
+
+let immediate_to_runtime_representation (imm : immediate) : int =
+  match imm with
+  | Bool value ->
+      if value then 0b10011111 else 0b11111
+  | Int value ->
+      value lsl num_shift
+
+type operand =
+  | Reg of register
+  | Imm of immediate
+  | MemOffset of (operand * operand)
 
 let is_register o = match o with Reg _ -> true | _ -> false
 
@@ -31,9 +56,10 @@ let rec string_of_operand ?(last_byte = false) = function
   | Reg r ->
       string_of_register ~last_byte r
   | Imm i ->
-      string_of_int i
+      i |> immediate_to_runtime_representation |> string_of_int
   | MemOffset (o1, o2) ->
-      Printf.sprintf "[%s + %s]" (string_of_operand o1) (string_of_operand o2)
+      Printf.sprintf "[%s + %s]" (string_of_operand o1)
+        (string_of_operand o2)
 
 type directive =
   | Global of string
@@ -84,36 +110,47 @@ let string_of_directive = function
       Printf.sprintf "align %d" i
   (* actual instructions *)
   | LeaLabel (dest, label) ->
-      Printf.sprintf "\tlea %s, [%s]" (string_of_operand dest)
+      Printf.sprintf "\tlea %s, [%s]"
+        (string_of_operand dest)
         (label_name macos label)
   | Mov (dest, src) ->
-      Printf.sprintf "\tmov %s, %s" (string_of_operand dest)
+      Printf.sprintf "\tmov %s, %s"
+        (string_of_operand dest)
         (string_of_operand src)
   | Add (dest, src) ->
-      Printf.sprintf "\tadd %s, %s" (string_of_operand dest)
+      Printf.sprintf "\tadd %s, %s"
+        (string_of_operand dest)
         (string_of_operand src)
   | Sub (dest, src) ->
-      Printf.sprintf "\tsub %s, %s" (string_of_operand dest)
+      Printf.sprintf "\tsub %s, %s"
+        (string_of_operand dest)
         (string_of_operand src)
   | And (dest, src) ->
-      Printf.sprintf "\tand %s, %s" (string_of_operand dest)
+      Printf.sprintf "\tand %s, %s"
+        (string_of_operand dest)
         (string_of_operand src)
   | Or (dest, src) ->
-      Printf.sprintf "\tor %s, %s" (string_of_operand dest)
+      Printf.sprintf "\tor %s, %s"
+        (string_of_operand dest)
         (string_of_operand src)
   | Shl (dest, src) ->
-      Printf.sprintf "\tshl %s, %s" (string_of_operand dest)
+      Printf.sprintf "\tshl %s, %s"
+        (string_of_operand dest)
         (string_of_operand src)
   | Shr (dest, src) ->
-      Printf.sprintf "\tshr %s, %s" (string_of_operand dest)
+      Printf.sprintf "\tshr %s, %s"
+        (string_of_operand dest)
         (string_of_operand src)
   | Cmp (dest, src) ->
-      Printf.sprintf "\tcmp %s, %s" (string_of_operand dest)
+      Printf.sprintf "\tcmp %s, %s"
+        (string_of_operand dest)
         (string_of_operand src)
   | Setz dest ->
-      Printf.sprintf "\tsetz %s" (string_of_operand ~last_byte:true dest)
+      Printf.sprintf "\tsetz %s"
+        (string_of_operand ~last_byte:true dest)
   | Setl dest ->
-      Printf.sprintf "\tsetl %s" (string_of_operand ~last_byte:true dest)
+      Printf.sprintf "\tsetl %s"
+        (string_of_operand ~last_byte:true dest)
   | Jmp name ->
       Printf.sprintf "\tjmp %s" (label_name macos name)
   | ComputedJmp op ->
