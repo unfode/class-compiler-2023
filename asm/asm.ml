@@ -1,62 +1,97 @@
-type register = Rax | Rcx | R8 | Rsp | Rdi
+type register_kind = Rax | Rcx | R8 | Rsp | Rdi
 
-let string_of_register ?(last_byte = false) (reg : register) : string =
-  match (reg, last_byte) with
-  | Rax, false ->
-      "rax"
-  | Rax, true ->
-      "al"
-  | Rcx, false ->
-      "rcx"
-  | Rcx, true ->
-      "cl"
-  | R8, false ->
-      "r8"
-  | R8, true ->
-      "r8b"
-  | Rsp, true ->
+type register = {kind: register_kind; last_byte: bool}
+
+let create_register (kind : register_kind) (last_byte : bool) :
+    register =
+  {kind; last_byte}
+
+let register_to_string (reg : register) : string =
+  match reg.kind with
+  | Rax ->
+      if reg.last_byte then "al" else "rax"
+  | Rcx ->
+      if reg.last_byte then "cl" else "rcx"
+  | R8 ->
+      if reg.last_byte then "r8b" else "r8"
+  | Rsp ->
       "rsp"
-  | Rsp, false ->
-      "rsp"
-  | Rdi, true ->
-      "rdi"
-  | Rdi, false ->
+  | Rdi ->
       "rdi"
 
-type operand = Reg of register | Imm of int | MemOffset of (operand * operand)
+let num_shift = 2
 
-let is_register o = match o with Reg _ -> true | _ -> false
+let num_mask = 0b11
 
-let rec string_of_operand ?(last_byte = false) = function
-  | Reg r ->
-      string_of_register ~last_byte r
-  | Imm i ->
-      string_of_int i
-  | MemOffset (o1, o2) ->
-      Printf.sprintf "[%s + %s]" (string_of_operand o1) (string_of_operand o2)
+let num_tag = 0b00
+
+let bool_shift = 7
+
+let bool_mask = 0b1111111
+
+let bool_tag = 0b0011111
+
+type value_to_encode = Int of int | Bool of bool
+
+let encode (value : value_to_encode) : int =
+  match value with
+  | Int i ->
+      i lsl num_shift
+  | Bool b ->
+      let bit = if b then 1 else 0 in
+      (bit lsl bool_shift) lor bool_tag
+
+type immediate = Encoding of value_to_encode | Literal of int
+
+let immediate_to_int (i : immediate) : int =
+  match i with
+  | Literal value ->
+      value
+  | Encoding value ->
+      encode value
+
+let immediate_to_string (i : immediate) : string =
+  i |> immediate_to_int |> string_of_int
+
+type dest_src =
+  | RegImm of register * immediate
+  | RegReg of register * register
+  | RegMem of register
+  | MemReg
+  | MemImm
+
+let dest_src_to_string (dest_src : dest_src) : string * string =
+  match dest_src with
+  | RegImm (reg, imm) ->
+      (register_to_string reg, immediate_to_string imm)
+  | RegReg (dest, src) ->
+      (register_to_string dest, register_to_string src)
+  | RegMem _ ->
+      ("a", "b")
+  | MemReg | MemImm ->
+      ("c", "d")
 
 type directive =
   | Global of string
   | Extern of string
   | Label of string
   | Align of int
-  | LeaLabel of (operand * string)
-  | Mov of (operand * operand)
-  | Add of (operand * operand)
-  | Sub of (operand * operand)
-  | And of (operand * operand)
-  | Or of (operand * operand)
-  | Shl of (operand * operand)
-  | Shr of (operand * operand)
-  | Cmp of (operand * operand)
-  | Setz of operand
-  | Setl of operand
+  | Mov of dest_src
+  | Add of dest_src
+  | Sub of dest_src
+  | And of dest_src
+  | Or of dest_src
+  | Shl of dest_src
+  | Shr of dest_src
+  | Cmp of dest_src
+  | Setz of register
+  | Setl of int
   | Jmp of string
-  | ComputedJmp of operand
+  | ComputedJmp of int
   | Jz of string
   | Jnz of string
   | Call of string
-  | ComputedCall of operand
+  | ComputedCall of int
   | Ret
   | Comment of string
 
@@ -69,7 +104,7 @@ let macos = run "uname" ["-s"] |> String.trim |> String.equal "Darwin"
 
 let label_name macos name = if macos then "_" ^ name else name
 
-let string_of_directive = function
+let directive_to_string = function
   (* frontmatter *)
   | Global l ->
       Printf.sprintf
@@ -83,49 +118,46 @@ let string_of_directive = function
   | Align i ->
       Printf.sprintf "align %d" i
   (* actual instructions *)
-  | LeaLabel (dest, label) ->
-      Printf.sprintf "\tlea %s, [%s]" (string_of_operand dest)
-        (label_name macos label)
-  | Mov (dest, src) ->
-      Printf.sprintf "\tmov %s, %s" (string_of_operand dest)
-        (string_of_operand src)
-  | Add (dest, src) ->
-      Printf.sprintf "\tadd %s, %s" (string_of_operand dest)
-        (string_of_operand src)
-  | Sub (dest, src) ->
-      Printf.sprintf "\tsub %s, %s" (string_of_operand dest)
-        (string_of_operand src)
-  | And (dest, src) ->
-      Printf.sprintf "\tand %s, %s" (string_of_operand dest)
-        (string_of_operand src)
-  | Or (dest, src) ->
-      Printf.sprintf "\tor %s, %s" (string_of_operand dest)
-        (string_of_operand src)
-  | Shl (dest, src) ->
-      Printf.sprintf "\tshl %s, %s" (string_of_operand dest)
-        (string_of_operand src)
-  | Shr (dest, src) ->
-      Printf.sprintf "\tshr %s, %s" (string_of_operand dest)
-        (string_of_operand src)
-  | Cmp (dest, src) ->
-      Printf.sprintf "\tcmp %s, %s" (string_of_operand dest)
-        (string_of_operand src)
-  | Setz dest ->
-      Printf.sprintf "\tsetz %s" (string_of_operand ~last_byte:true dest)
-  | Setl dest ->
-      Printf.sprintf "\tsetl %s" (string_of_operand ~last_byte:true dest)
+  | Mov dest_src ->
+      let dest_string, src_string = dest_src_to_string dest_src in
+      Printf.sprintf "\tmov %s, %s" dest_string src_string
+  | Add dest_src ->
+      let dest_string, src_string = dest_src_to_string dest_src in
+      Printf.sprintf "\tadd %s, %s" dest_string src_string
+  | Sub dest_src ->
+      let dest_string, src_string = dest_src_to_string dest_src in
+      Printf.sprintf "\tsub %s, %s" dest_string src_string
+  | And dest_src ->
+      let dest_string, src_string = dest_src_to_string dest_src in
+      Printf.sprintf "\tadd %s, %s" dest_string src_string
+  | Or dest_src ->
+      let dest_string, src_string = dest_src_to_string dest_src in
+      Printf.sprintf "\tor %s, %s" dest_string src_string
+  | Shl dest_src ->
+      let dest_string, src_string = dest_src_to_string dest_src in
+      Printf.sprintf "\tshl %s, %s" dest_string src_string
+  | Shr dest_src ->
+      let dest_string, src_string = dest_src_to_string dest_src in
+      Printf.sprintf "\tshr %s, %s" dest_string src_string
+  | Cmp dest_src ->
+      let dest_string, src_string = dest_src_to_string dest_src in
+      Printf.sprintf "\tcmp %s, %s" dest_string src_string
+  | Setz _ ->
+      "todo"
+  | Setl _ ->
+      "todo"
   | Jmp name ->
       Printf.sprintf "\tjmp %s" (label_name macos name)
-  | ComputedJmp op ->
-      Printf.sprintf "\tjmp %s" (string_of_operand op)
+  | ComputedJmp _ ->
+      "todo"
   | Jz name ->
       Printf.sprintf "\tjz %s" (label_name macos name)
   | Jnz name ->
       Printf.sprintf "\tjnz %s" (label_name macos name)
   | Call name ->
       Printf.sprintf "\tcall %s" (label_name macos name)
-  | ComputedCall op ->
-      Printf.sprintf "\tcall %s" (string_of_operand op)
+  | ComputedCall _ ->
+      "todo"
   | Ret ->
       "\tret"
   | Comment s ->

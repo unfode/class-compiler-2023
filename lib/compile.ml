@@ -1,78 +1,66 @@
-open S_exp
 open Asm
 open Util
-
-exception BadExpression of s_exp
-
-let num_shift = 2
-
-let num_mask = 0b11
-
-let num_tag = 0b00
-
-let bool_shift = 7
-
-let bool_mask = 0b1111111
-
-let bool_tag = 0b0011111
-
-let operand_of_bool (b : bool) : operand =
-  Imm (((if b then 1 else 0) lsl bool_shift) lor bool_tag)
-
-let operand_of_num (x : int) : operand =
-  Imm ((x lsl num_shift) lor num_tag)
+open Lisp_expression
 
 let zf_to_bool : directive list =
-  [ Mov (Reg Rax, Imm 0)
-  ; Setz (Reg Rax)
-  ; Shl (Reg Rax, Imm bool_shift)
-  ; Or (Reg Rax, Imm bool_tag) ]
+  let rax = create_register Rax false in
+  [ Mov (RegImm (rax, Literal 0))
+  ; Setz rax
+  ; Shl (RegImm (rax, Literal bool_shift))
+  ; Or (RegImm (rax, Literal bool_tag)) ]
 
-let rec compile_exp (exp : s_exp) : directive list =
-  match exp with
-  | Sym "true" ->
-      [Mov (Reg Rax, operand_of_bool true)]
-  | Sym "false" ->
-      [Mov (Reg Rax, operand_of_bool false)]
-  | Num n ->
-      [Mov (Reg Rax, operand_of_num n)]
-  | Lst [Sym "add1"; arg] ->
-      compile_exp arg @ [Add (Reg Rax, Imm (1 lsl num_shift))]
-  | Lst [Sym "sub1"; arg] ->
-      compile_exp arg @ [Sub (Reg Rax, Imm (1 lsl num_shift))]
-  | Lst [Sym "not"; arg] ->
-      compile_exp arg
-      @ [Cmp (Reg Rax, Imm ((0 lsl bool_shift) lor bool_tag))]
-      @ zf_to_bool
-  | Lst [Sym "zero?"; arg] ->
-      compile_exp arg @ [Cmp (Reg Rax, operand_of_num 0)] @ zf_to_bool
-  | Lst [Sym "num?"; arg] ->
-      compile_exp arg
-      @ [And (Reg Rax, Imm num_mask); Cmp (Reg Rax, Imm num_tag)]
-      @ zf_to_bool
-  | Lst [Sym "if"; test_exp; then_exp; else_exp] ->
-      let else_label = gensym "else" in
-      let continue_label = gensym "continue" in
-      compile_exp test_exp
-      @ [Cmp (Reg Rax, operand_of_bool false); Jz else_label]
-      @ compile_exp then_exp @ [Jmp continue_label]
-      @ [Label else_label] @ compile_exp else_exp
-      @ [Label continue_label]
-  | e ->
-      raise (BadExpression e)
+let rec compile (expression : lisp_expression) : directive list =
+  let body =
+    match expression with
+    | Number n ->
+        let rax = create_register Rax false in
+        [Mov (RegImm (rax, Encoding (Int n)))]
+    | Boolean b ->
+        let rax = create_register Rax false in
+        [Mov (RegImm (rax, Encoding (Bool b)))]
+    | Not arg ->
+        let rax = create_register Rax false in
+        compile arg
+        @ [Cmp (RegImm (rax, Encoding (Bool false)))]
+        @ zf_to_bool
+    | Is_zero arg ->
+        let rax = create_register Rax false in
+        compile arg
+        @ [Cmp (RegImm (rax, Encoding (Int 0)))]
+        @ zf_to_bool
+    | Is_num arg ->
+        let rax = create_register Rax false in
+        compile arg
+        @ [ And (RegImm (rax, Literal num_mask))
+          ; Cmp (RegImm (rax, Literal num_tag)) ]
+        @ zf_to_bool
+    | Add1 arg ->
+        let rax = create_register Rax false in
+        compile arg @ [Add (RegImm (rax, Encoding (Int 1)))]
+    | Sub1 arg ->
+        let rax = create_register Rax false in
+        compile arg @ [Sub (RegImm (rax, Encoding (Int 1)))]
+    | If {conditional; consequent; alternative} ->
+        let rax = create_register Rax false in
+        let else_label = gensym "else" in
+        let continue_label = gensym "continue" in
+        compile conditional
+        @ [Cmp (RegImm (rax, Encoding (Bool false))); Jz else_label]
+        @ compile consequent @ [Jmp continue_label]
+        @ [Label else_label] @ compile alternative
+        @ [Label continue_label]
+  in
+  [Global "entry"; Label "entry"] @ body
 
-let compile (program : s_exp) : string =
-  [Global "entry"; Label "entry"] @ compile_exp program @ [Ret]
-  |> List.map string_of_directive
-  |> String.concat "\n"
-
-let compile_to_file (program : string) : unit =
+let run (expression : lisp_expression) : string =
+  let assembly =
+    expression |> compile
+    |> List.map directive_to_string
+    |> String.concat "\n"
+  in
   let file = open_out "program.s" in
-  output_string file (compile (parse program)) ;
-  close_out file
-
-let compile_and_run (program : string) : string =
-  compile_to_file program ;
+  output_string file assembly ;
+  close_out file ;
   ignore (Unix.system "nasm program.s -f elf64 -o program.o") ;
   ignore
     (Unix.system "gcc program.o runtime.o -o program -z noexecstack") ;

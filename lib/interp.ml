@@ -1,56 +1,80 @@
-open S_exp
-
-exception BadExpression of s_exp
+open Lisp_expression
 
 type value = Number of int | Boolean of bool
 
-let string_of_value (v : value) : string =
+let value_to_string (v : value) : string =
   match v with
   | Number n ->
       string_of_int n
   | Boolean b ->
       if b then "true" else "false"
 
-let rec interp_exp (exp : s_exp) : value =
-  match exp with
-  | Num n ->
-      Number n
-  | Sym "true" ->
-      Boolean true
-  | Sym "false" ->
-      Boolean false
-  | Lst [Sym "not"; arg] ->
-      if interp_exp arg = Boolean false then Boolean true
-      else Boolean false
-  | Lst [Sym "zero?"; arg] -> (
-    match interp_exp arg with
-    | Number 0 ->
-        Boolean true
-    | _ ->
-        Boolean false )
-  | Lst [Sym "num?"; arg] -> (
-    match interp_exp arg with
-    | Number _ ->
-        Boolean true
-    | _ ->
-        Boolean false )
-  | Lst [Sym "add1"; arg] -> (
-    match interp_exp arg with
-    | Number n ->
-        Number (n + 1)
-    | _ ->
-        raise (BadExpression exp) )
-  | Lst [Sym "sub1"; arg] -> (
-    match interp_exp arg with
-    | Number n ->
-        Number (n - 1)
-    | _ ->
-        raise (BadExpression exp) )
-  | Lst [Sym "if"; test_exp; then_exp; else_exp] ->
-      if interp_exp test_exp = Boolean false then interp_exp else_exp
-      else interp_exp then_exp
-  | _ ->
-      raise (BadExpression exp)
+type interpret_result = Correct of value | Error
 
-let interp (program : string) : string =
-  parse program |> interp_exp |> string_of_value
+let interpret_result_to_string (result : interpret_result) : string =
+  match result with
+  | Error ->
+      "error"
+  | Correct value ->
+      value_to_string value
+
+let rec interpret (expression : lisp_expression) : interpret_result =
+  match expression with
+  | Number n ->
+      Correct (Number n)
+  | Boolean b ->
+      Correct (Boolean b)
+  | Not arg -> (
+    match interpret arg with
+    | Error ->
+        Error
+    | Correct arg_value ->
+        if arg_value = Boolean false then Correct (Boolean true)
+        else Correct (Boolean false) )
+  | Is_zero arg -> (
+    match interpret arg with
+    | Error ->
+        Error
+    | Correct arg_value ->
+        if arg_value = Number 0 then Correct (Boolean true)
+        else Correct (Boolean false) )
+  | Is_num arg -> (
+    match interpret arg with
+    | Error ->
+        Error
+    | Correct arg_value -> (
+      match arg_value with
+      | Number _ ->
+          Correct (Boolean true)
+      | Boolean _ ->
+          Correct (Boolean false) ) )
+  | Add1 arg -> (
+    match interpret arg with
+    | Error ->
+        Error
+    | Correct arg_value -> (
+      match arg_value with
+      | Number n ->
+          Correct (Number (n + 1))
+      | Boolean _ ->
+          Error ) )
+  | Sub1 arg -> (
+    match interpret arg with
+    | Error ->
+        Error
+    | Correct arg_value -> (
+      match arg_value with
+      | Number n ->
+          Correct (Number (n - 1))
+      | Boolean _ ->
+          Error ) )
+  | If {conditional; consequent; alternative} -> (
+    match interpret conditional with
+    | Error ->
+        Error
+    | Correct conditional_value -> (
+      match conditional_value with
+      | Boolean false ->
+          interpret alternative
+      | Boolean true | Number _ ->
+          interpret consequent ) )
