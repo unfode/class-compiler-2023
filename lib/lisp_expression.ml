@@ -12,6 +12,10 @@ type lisp_expression =
       { conditional: lisp_expression
       ; consequent: lisp_expression
       ; alternative: lisp_expression }
+  | Add of lisp_expression * lisp_expression
+  | Sub of lisp_expression * lisp_expression
+  | Eq of lisp_expression * lisp_expression
+  | Lt of lisp_expression * lisp_expression
 
 let rec s_exp_to_lisp_expression (s_expression : s_exp) :
     lisp_expression option =
@@ -70,5 +74,45 @@ let rec s_exp_to_lisp_expression (s_expression : s_exp) :
                  { conditional= test_lisp_expr
                  ; consequent= then_lisp_expr
                  ; alternative= else_lisp_expr } ) ) ) )
+  | Lst [Sym "+"; arg1; arg2] -> (
+    match s_exp_to_lisp_expression arg1 with
+    | None ->
+        None
+    | Some arg1_lisp_expr -> (
+      match s_exp_to_lisp_expression arg2 with
+      | None ->
+          None
+      | Some arg2_lisp_expr ->
+          Some (Add (arg1_lisp_expr, arg2_lisp_expr)) ) )
+  | Lst [Sym "-"; arg1; arg2] -> (
+    match s_exp_to_lisp_expression arg1 with
+    | None ->
+        None
+    | Some arg1_lisp_expr -> (
+      match s_exp_to_lisp_expression arg2 with
+      | None ->
+          None
+      | Some arg2_lisp_expr ->
+          Some (Sub (arg1_lisp_expr, arg2_lisp_expr)) ) )
+  | Lst [Sym "="; arg1; arg2] -> (
+    match s_exp_to_lisp_expression arg1 with
+    | None ->
+        None
+    | Some arg1_lisp_expr -> (
+      match s_exp_to_lisp_expression arg2 with
+      | None ->
+          None
+      | Some arg2_lisp_expr ->
+          Some (Eq (arg1_lisp_expr, arg2_lisp_expr)) ) )
+  | Lst [Sym "<"; arg1; arg2] -> (
+    match s_exp_to_lisp_expression arg1 with
+    | None ->
+        None
+    | Some arg1_lisp_expr -> (
+      match s_exp_to_lisp_expression arg2 with
+      | None ->
+          None
+      | Some arg2_lisp_expr ->
+          Some (Lt (arg1_lisp_expr, arg2_lisp_expr)) ) )
   | _ ->
       None

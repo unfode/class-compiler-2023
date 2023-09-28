@@ -53,12 +53,29 @@ let immediate_to_int (i : immediate) : int =
 let immediate_to_string (i : immediate) : string =
   i |> immediate_to_int |> string_of_int
 
+type memory =
+  | Reg of register
+  | Int of int
+  | RegInt of register * int
+
+let memory_to_string (mem : memory) : string =
+  let body =
+    match mem with
+    | Reg reg ->
+        register_to_string reg
+    | Int i ->
+        string_of_int i
+    | RegInt (reg, i) ->
+        register_to_string reg ^ " + " ^ string_of_int i
+  in
+  "[" ^ body ^ "]"
+
 type dest_src =
   | RegImm of register * immediate
   | RegReg of register * register
-  | RegMem of register
-  | MemReg
-  | MemImm
+  | RegMem of register * memory
+  | MemReg of memory * register
+  | MemImm of memory * immediate
 
 let dest_src_to_string (dest_src : dest_src) : string * string =
   match dest_src with
@@ -66,10 +83,12 @@ let dest_src_to_string (dest_src : dest_src) : string * string =
       (register_to_string reg, immediate_to_string imm)
   | RegReg (dest, src) ->
       (register_to_string dest, register_to_string src)
-  | RegMem _ ->
-      ("a", "b")
-  | MemReg | MemImm ->
-      ("c", "d")
+  | RegMem (reg, mem) ->
+      (register_to_string reg, memory_to_string mem)
+  | MemReg (mem, reg) ->
+      (memory_to_string mem, register_to_string reg)
+  | MemImm (mem, imm) ->
+      (memory_to_string mem, immediate_to_string imm)
 
 type directive =
   | Global of string
@@ -85,7 +104,7 @@ type directive =
   | Shr of dest_src
   | Cmp of dest_src
   | Setz of register
-  | Setl of int
+  | Setl of register
   | Jmp of string
   | ComputedJmp of int
   | Jz of string
@@ -142,10 +161,10 @@ let directive_to_string = function
   | Cmp dest_src ->
       let dest_string, src_string = dest_src_to_string dest_src in
       Printf.sprintf "\tcmp %s, %s" dest_string src_string
-  | Setz _ ->
-      "todo"
-  | Setl _ ->
-      "todo"
+  | Setz reg ->
+      Printf.sprintf "\tsetz %s" (register_to_string reg)
+  | Setl reg ->
+      Printf.sprintf "\tsetl %s" (register_to_string reg)
   | Jmp name ->
       Printf.sprintf "\tjmp %s" (label_name macos name)
   | ComputedJmp _ ->

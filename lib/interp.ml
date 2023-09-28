@@ -78,3 +78,67 @@ let rec interpret (expression : lisp_expression) : interpret_result =
           interpret alternative
       | Boolean true | Number _ ->
           interpret consequent ) )
+  | Add (operand1, operand2) -> (
+    match interpret operand1 with
+    | Error ->
+        Error
+    | Correct operand1_value -> (
+      match operand1_value with
+      | Number n1 -> (
+        match interpret operand2 with
+        | Error ->
+            Error
+        | Correct operand2_value -> (
+          match operand2_value with
+          | Number n2 ->
+              Correct (Number (n1 + n2))
+          | _ ->
+              Error ) )
+      | _ ->
+          Error ) )
+  | Sub (operand1, operand2) -> (
+    match interpret operand1 with
+    | Error ->
+        Error
+    | Correct operand1_value -> (
+      match operand1_value with
+      | Number n1 -> (
+        match interpret operand2 with
+        | Error ->
+            Error
+        | Correct operand2_value -> (
+          match operand2_value with
+          | Number n2 ->
+              Correct (Number (n1 - n2))
+          | _ ->
+              Error ) )
+      | _ ->
+          Error ) )
+  | Eq (operand1, operand2) -> (
+    match interpret operand1 with
+    | Error ->
+        Error
+    | Correct operand1_value -> (
+      match interpret operand2 with
+      | Error ->
+          Error
+      | Correct operand2_value ->
+          Correct (Boolean (operand1_value = operand2_value)) ) )
+  | Lt (operand1, operand2) -> (
+    match interpret operand1 with
+    | Error ->
+        Error
+    | Correct operand1_value -> (
+      match operand1_value with
+      | Number n1 -> (
+        match interpret operand2 with
+        | Error ->
+            Error
+        | Correct operand2_value -> (
+          match operand2_value with
+          | Number n2 ->
+              Correct (Boolean (n1 < n2))
+          | _ ->
+              Error ) )
+      | _ ->
+          Error ) )

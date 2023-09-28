@@ -2,54 +2,100 @@ open Asm
 open Util
 open Lisp_expression
 
+let rax : register = create_register Rax false
+
+let rsp : register = create_register Rsp false
+
+let r8 : register = create_register R8 false
+
 let zf_to_bool : directive list =
-  let rax = create_register Rax false in
   [ Mov (RegImm (rax, Literal 0))
   ; Setz rax
   ; Shl (RegImm (rax, Literal bool_shift))
   ; Or (RegImm (rax, Literal bool_tag)) ]
 
-let rec compile (expression : lisp_expression) : directive list =
-  let body =
-    match expression with
-    | Number n ->
-        let rax = create_register Rax false in
-        [Mov (RegImm (rax, Encoding (Int n)))]
-    | Boolean b ->
-        let rax = create_register Rax false in
-        [Mov (RegImm (rax, Encoding (Bool b)))]
-    | Not arg ->
-        let rax = create_register Rax false in
-        compile arg
-        @ [Cmp (RegImm (rax, Encoding (Bool false)))]
-        @ zf_to_bool
-    | Is_zero arg ->
-        let rax = create_register Rax false in
-        compile arg
-        @ [Cmp (RegImm (rax, Encoding (Int 0)))]
-        @ zf_to_bool
-    | Is_num arg ->
-        let rax = create_register Rax false in
-        compile arg
-        @ [ And (RegImm (rax, Literal num_mask))
-          ; Cmp (RegImm (rax, Literal num_tag)) ]
-        @ zf_to_bool
-    | Add1 arg ->
-        let rax = create_register Rax false in
-        compile arg @ [Add (RegImm (rax, Encoding (Int 1)))]
-    | Sub1 arg ->
-        let rax = create_register Rax false in
-        compile arg @ [Sub (RegImm (rax, Encoding (Int 1)))]
-    | If {conditional; consequent; alternative} ->
-        let rax = create_register Rax false in
-        let else_label = gensym "else" in
-        let continue_label = gensym "continue" in
-        compile conditional
-        @ [Cmp (RegImm (rax, Encoding (Bool false))); Jz else_label]
-        @ compile consequent @ [Jmp continue_label]
-        @ [Label else_label] @ compile alternative
-        @ [Label continue_label]
-  in
+let lf_to_bool : directive list =
+  [ Mov (RegImm (rax, Literal 0))
+  ; Setl rax
+  ; Shl (RegImm (rax, Literal bool_shift))
+  ; Or (RegImm (rax, Literal bool_tag)) ]
+
+let rec compile_body (stack_index : int) (expression : lisp_expression)
+    : directive list =
+  match expression with
+  | Number n ->
+      [Mov (RegImm (rax, Encoding (Int n)))]
+  | Boolean b ->
+      [Mov (RegImm (rax, Encoding (Bool b)))]
+  | Not arg ->
+      compile_body stack_index arg
+      @ [Cmp (RegImm (rax, Encoding (Bool false)))]
+      @ zf_to_bool
+  | Is_zero arg ->
+      compile_body stack_index arg
+      @ [Cmp (RegImm (rax, Encoding (Int 0)))]
+      @ zf_to_bool
+  | Is_num arg ->
+      compile_body stack_index arg
+      @ [ And (RegImm (rax, Literal num_mask))
+        ; Cmp (RegImm (rax, Literal num_tag)) ]
+      @ zf_to_bool
+  | Add1 arg ->
+      compile_body stack_index arg
+      @ [Add (RegImm (rax, Encoding (Int 1)))]
+  | Sub1 arg ->
+      compile_body stack_index arg
+      @ [Sub (RegImm (rax, Encoding (Int 1)))]
+  | If {conditional; consequent; alternative} ->
+      let else_label = gensym "else" in
+      let continue_label = gensym "continue" in
+      compile_body stack_index conditional
+      @ [Cmp (RegImm (rax, Encoding (Bool false))); Jz else_label]
+      @ compile_body stack_index consequent
+      @ [Jmp continue_label] @ [Label else_label]
+      @ compile_body stack_index alternative
+      @ [Label continue_label]
+  | Add (arg1, arg2) ->
+      let arg1_directives = compile_body stack_index arg1 in
+      let arg1_memory_location = RegInt (rsp, stack_index) in
+      let arg2_directives = compile_body (stack_index - 8) arg2 in
+      arg1_directives
+      @ [Mov (MemReg (arg1_memory_location, rax))]
+      @ arg2_directives
+      @ [Mov (RegMem (r8, arg1_memory_location))]
+      @ [Add (RegReg (rax, r8))]
+  | Sub (arg1, arg2) ->
+      let arg1_directives = compile_body stack_index arg1 in
+      let arg1_memory_location = RegInt (rsp, stack_index) in
+      let arg2_directives = compile_body (stack_index - 8) arg2 in
+      arg1_directives
+      @ [Mov (MemReg (arg1_memory_location, rax))]
+      @ arg2_directives
+      @ [Mov (RegMem (r8, arg1_memory_location))]
+      @ [Sub (RegReg (rax, r8))]
+  | Eq (arg1, arg2) ->
+      let arg1_directives = compile_body stack_index arg1 in
+      let arg1_memory_location = RegInt (rsp, stack_index) in
+      let arg2_directives = compile_body (stack_index - 8) arg2 in
+      arg1_directives
+      @ [Mov (MemReg (arg1_memory_location, rax))]
+      @ arg2_directives
+      @ [Mov (RegMem (r8, arg1_memory_location))]
+      @ [Cmp (RegReg (rax, r8))]
+      @ zf_to_bool
+  | Lt (arg1, arg2) ->
+      let arg1_directives = compile_body stack_index arg1 in
+      let arg1_memory_location = RegInt (rsp, stack_index) in
+      let arg2_directives = compile_body (stack_index - 8) arg2 in
+      arg1_directives
+      @ [Mov (MemReg (arg1_memory_location, rax))]
+      @ arg2_directives
+      @ [Mov (RegMem (r8, arg1_memory_location))]
+      @ [Cmp (RegReg (r8, rax))]
+      @ lf_to_bool
+
+let compile (expression : lisp_expression) : directive list =
+  let body = compile_body (-8) expression in
   [Global "entry"; Label "entry"] @ body
 
 let run (expression : lisp_expression) : string =
