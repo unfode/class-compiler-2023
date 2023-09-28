@@ -21,17 +21,17 @@ let register_to_string (reg : register) : string =
 
 type memory =
   | Reg of register
-  | Int of int
-  | RegInt of register * int
+  | Imm of int
+  | RegImm of register * int
 
 let memory_to_string (mem : memory) : string =
   let body =
     match mem with
     | Reg reg ->
         register_to_string reg
-    | Int i ->
+    | Imm i ->
         string_of_int i
-    | RegInt (reg, i) ->
+    | RegImm (reg, i) ->
         register_to_string reg ^ " + " ^ string_of_int i
   in
   "[" ^ body ^ "]"

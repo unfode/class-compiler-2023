@@ -78,7 +78,7 @@ let rec compile_body (stack_index : int) (expression : lisp_expression)
       @ [Label continue_label]
   | Add (arg1, arg2) ->
       let arg1_directives = compile_body stack_index arg1 in
-      let arg1_memory_location = RegInt (rsp, stack_index) in
+      let arg1_memory_location : memory = RegImm (rsp, stack_index) in
       let arg2_directives = compile_body (stack_index - 8) arg2 in
       arg1_directives
       @ [Mov (MemReg (arg1_memory_location, rax))]
@@ -87,7 +87,7 @@ let rec compile_body (stack_index : int) (expression : lisp_expression)
       @ [Add (RegReg (rax, r8))]
   | Sub (arg1, arg2) ->
       let arg1_directives = compile_body stack_index arg1 in
-      let arg1_memory_location = RegInt (rsp, stack_index) in
+      let arg1_memory_location : memory = RegImm (rsp, stack_index) in
       let arg2_directives = compile_body (stack_index - 8) arg2 in
       arg1_directives
       @ [Mov (MemReg (arg1_memory_location, rax))]
@@ -96,7 +96,7 @@ let rec compile_body (stack_index : int) (expression : lisp_expression)
       @ [Sub (RegReg (rax, r8))]
   | Eq (arg1, arg2) ->
       let arg1_directives = compile_body stack_index arg1 in
-      let arg1_memory_location = RegInt (rsp, stack_index) in
+      let arg1_memory_location : memory = RegImm (rsp, stack_index) in
       let arg2_directives = compile_body (stack_index - 8) arg2 in
       arg1_directives
       @ [Mov (MemReg (arg1_memory_location, rax))]
@@ -106,7 +106,7 @@ let rec compile_body (stack_index : int) (expression : lisp_expression)
       @ zf_to_bool
   | Lt (arg1, arg2) ->
       let arg1_directives = compile_body stack_index arg1 in
-      let arg1_memory_location = RegInt (rsp, stack_index) in
+      let arg1_memory_location : memory = RegImm (rsp, stack_index) in
       let arg2_directives = compile_body (stack_index - 8) arg2 in
       arg1_directives
       @ [Mov (MemReg (arg1_memory_location, rax))]
