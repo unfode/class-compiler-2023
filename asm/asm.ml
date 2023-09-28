@@ -19,40 +19,6 @@ let register_to_string (reg : register) : string =
   | Rdi ->
       "rdi"
 
-let num_shift = 2
-
-let num_mask = 0b11
-
-let num_tag = 0b00
-
-let bool_shift = 7
-
-let bool_mask = 0b1111111
-
-let bool_tag = 0b0011111
-
-type value_to_encode = Int of int | Bool of bool
-
-let encode (value : value_to_encode) : int =
-  match value with
-  | Int i ->
-      i lsl num_shift
-  | Bool b ->
-      let bit = if b then 1 else 0 in
-      (bit lsl bool_shift) lor bool_tag
-
-type immediate = Encoding of value_to_encode | Literal of int
-
-let immediate_to_int (i : immediate) : int =
-  match i with
-  | Literal value ->
-      value
-  | Encoding value ->
-      encode value
-
-let immediate_to_string (i : immediate) : string =
-  i |> immediate_to_int |> string_of_int
-
 type memory =
   | Reg of register
   | Int of int
@@ -71,16 +37,16 @@ let memory_to_string (mem : memory) : string =
   "[" ^ body ^ "]"
 
 type dest_src =
-  | RegImm of register * immediate
+  | RegImm of register * int
   | RegReg of register * register
   | RegMem of register * memory
   | MemReg of memory * register
-  | MemImm of memory * immediate
+  | MemImm of memory * int
 
 let dest_src_to_string (dest_src : dest_src) : string * string =
   match dest_src with
   | RegImm (reg, imm) ->
-      (register_to_string reg, immediate_to_string imm)
+      (register_to_string reg, string_of_int imm)
   | RegReg (dest, src) ->
       (register_to_string dest, register_to_string src)
   | RegMem (reg, mem) ->
@@ -88,7 +54,7 @@ let dest_src_to_string (dest_src : dest_src) : string * string =
   | MemReg (mem, reg) ->
       (memory_to_string mem, register_to_string reg)
   | MemImm (mem, imm) ->
-      (memory_to_string mem, immediate_to_string imm)
+      (memory_to_string mem, string_of_int imm)
 
 type directive =
   | Global of string
