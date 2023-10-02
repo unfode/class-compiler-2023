@@ -2,27 +2,28 @@ open Asm
 open Util
 open Lisp_expression
 
-let num_shift = 2
+module Encode = struct
+  let num_shift = 2
 
-let num_mask = 0b11
+  let num_mask = 0b11
 
-let num_tag = 0b00
+  let num_tag = 0b00
 
-let bool_shift = 7
+  let bool_shift = 7
 
-let bool_mask = 0b1111111
+  let bool_mask = 0b1111111
 
-let bool_tag = 0b0011111
+  let bool_tag = 0b0011111
 
-type value_to_encode = Int of int | Bool of bool
+  let encode (value : int) (shift : int) (tag : int) : int =
+    (value lsl shift) lor tag
 
-let encode (value : value_to_encode) : int =
-  match value with
-  | Int i ->
-      i lsl num_shift
-  | Bool b ->
-      let bit = if b then 1 else 0 in
-      (bit lsl bool_shift) lor bool_tag
+  let from_int (n : int) : int = encode n num_shift num_tag
+
+  let from_bool (b : bool) : int =
+    let bit = if b then 1 else 0 in
+    encode bit bool_shift bool_tag
+end
 
 let rax : register = create_register Rax false
 
@@ -33,45 +34,46 @@ let r8 : register = create_register R8 false
 let zf_to_bool : directive list =
   [ Mov (RegImm (rax, 0))
   ; Setz rax
-  ; Shl (RegImm (rax, bool_shift))
-  ; Or (RegImm (rax, bool_tag)) ]
+  ; Shl (RegImm (rax, Encode.bool_shift))
+  ; Or (RegImm (rax, Encode.bool_tag)) ]
 
 let lf_to_bool : directive list =
   [ Mov (RegImm (rax, 0))
   ; Setl rax
-  ; Shl (RegImm (rax, bool_shift))
-  ; Or (RegImm (rax, bool_tag)) ]
+  ; Shl (RegImm (rax, Encode.bool_shift))
+  ; Or (RegImm (rax, Encode.bool_tag)) ]
 
 let rec compile_body (stack_index : int) (expression : lisp_expression)
     : directive list =
   match expression with
   | Number n ->
-      [Mov (RegImm (rax, encode (Int n)))]
+      [Mov (RegImm (rax, Encode.from_int n))]
   | Boolean b ->
-      [Mov (RegImm (rax, encode (Bool b)))]
+      [Mov (RegImm (rax, Encode.from_bool b))]
   | Not arg ->
       compile_body stack_index arg
-      @ [Cmp (RegImm (rax, encode (Bool false)))]
+      @ [Cmp (RegImm (rax, Encode.from_bool false))]
       @ zf_to_bool
   | Is_zero arg ->
       compile_body stack_index arg
-      @ [Cmp (RegImm (rax, encode (Int 0)))]
+      @ [Cmp (RegImm (rax, Encode.from_int 0))]
       @ zf_to_bool
   | Is_num arg ->
       compile_body stack_index arg
-      @ [And (RegImm (rax, num_mask)); Cmp (RegImm (rax, num_tag))]
+      @ [ And (RegImm (rax, Encode.num_mask))
+        ; Cmp (RegImm (rax, Encode.num_tag)) ]
       @ zf_to_bool
   | Add1 arg ->
       compile_body stack_index arg
-      @ [Add (RegImm (rax, encode (Int 1)))]
+      @ [Add (RegImm (rax, Encode.from_int 1))]
   | Sub1 arg ->
       compile_body stack_index arg
-      @ [Sub (RegImm (rax, encode (Int 1)))]
+      @ [Sub (RegImm (rax, Encode.from_int 1))]
   | If {conditional; consequent; alternative} ->
       let else_label = gensym "else" in
       let continue_label = gensym "continue" in
       compile_body stack_index conditional
-      @ [Cmp (RegImm (rax, encode (Bool false))); Jz else_label]
+      @ [Cmp (RegImm (rax, Encode.from_bool false)); Jz else_label]
       @ compile_body stack_index consequent
       @ [Jmp continue_label] @ [Label else_label]
       @ compile_body stack_index alternative
