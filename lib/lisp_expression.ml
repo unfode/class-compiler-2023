@@ -19,6 +19,9 @@ type lisp_expression =
   | Var of string
   | Let of
       {name: string; value: lisp_expression; body: lisp_expression}
+  | Pair of lisp_expression * lisp_expression
+  | Left of lisp_expression
+  | Right of lisp_expression
 
 let rec s_exp_to_lisp_expression (s_expression : s_exp) :
     lisp_expression option =

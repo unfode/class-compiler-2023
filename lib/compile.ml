@@ -15,6 +15,10 @@ module Encode = struct
 
   let bool_tag = 0b0011111
 
+  let pair_tag = 0b010
+
+  let heap_mask = 0b111
+
   let encode (value : int) (shift : int) (tag : int) : int =
     (value lsl shift) lor tag
 
@@ -25,23 +29,17 @@ module Encode = struct
     encode bit bool_shift bool_tag
 end
 
-let rax : register = create_register Rax false
-
-let rsp : register = create_register Rsp false
-
-let r8 : register = create_register R8 false
-
 let zf_to_bool : directive list =
-  [ Mov (RegImm (rax, 0))
-  ; Setz rax
-  ; Shl (RegImm (rax, Encode.bool_shift))
-  ; Or (RegImm (rax, Encode.bool_tag)) ]
+  [ Mov (RegImm (Rax, 0))
+  ; Setz Rax
+  ; Shl (RegImm (Rax, Encode.bool_shift))
+  ; Or (RegImm (Rax, Encode.bool_tag)) ]
 
 let lf_to_bool : directive list =
-  [ Mov (RegImm (rax, 0))
-  ; Setl rax
-  ; Shl (RegImm (rax, Encode.bool_shift))
-  ; Or (RegImm (rax, Encode.bool_tag)) ]
+  [ Mov (RegImm (Rax, 0))
+  ; Setl Rax
+  ; Shl (RegImm (Rax, Encode.bool_shift))
+  ; Or (RegImm (Rax, Encode.bool_tag)) ]
 
 type compile_body_result = Error | Correct of directive list
 
@@ -49,9 +47,9 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
     (expression : lisp_expression) : compile_body_result =
   match expression with
   | Number n ->
-      Correct [Mov (RegImm (rax, Encode.from_int n))]
+      Correct [Mov (RegImm (Rax, Encode.from_int n))]
   | Boolean b ->
-      Correct [Mov (RegImm (rax, Encode.from_bool b))]
+      Correct [Mov (RegImm (Rax, Encode.from_bool b))]
   | Not arg -> (
     match compile_body symbol_table stack_index arg with
     | Error ->
@@ -59,7 +57,7 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
     | Correct arg_directives ->
         Correct
           ( arg_directives
-          @ [Cmp (RegImm (rax, Encode.from_bool false))]
+          @ [Cmp (RegImm (Rax, Encode.from_bool false))]
           @ zf_to_bool ) )
   | Is_zero arg -> (
     match compile_body symbol_table stack_index arg with
@@ -68,7 +66,7 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
     | Correct arg_directives ->
         Correct
           ( arg_directives
-          @ [Cmp (RegImm (rax, Encode.from_int 0))]
+          @ [Cmp (RegImm (Rax, Encode.from_int 0))]
           @ zf_to_bool ) )
   | Is_num arg -> (
     match compile_body symbol_table stack_index arg with
@@ -77,8 +75,8 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
     | Correct arg_directives ->
         Correct
           ( arg_directives
-          @ [ And (RegImm (rax, Encode.num_mask))
-            ; Cmp (RegImm (rax, Encode.num_tag)) ]
+          @ [ And (RegImm (Rax, Encode.num_mask))
+            ; Cmp (RegImm (Rax, Encode.num_tag)) ]
           @ zf_to_bool ) )
   | Add1 arg -> (
     match compile_body symbol_table stack_index arg with
@@ -86,14 +84,14 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
         Error
     | Correct arg_directives ->
         Correct
-          (arg_directives @ [Add (RegImm (rax, Encode.from_int 1))]) )
+          (arg_directives @ [Add (RegImm (Rax, Encode.from_int 1))]) )
   | Sub1 arg -> (
     match compile_body symbol_table stack_index arg with
     | Error ->
         Error
     | Correct arg_directives ->
         Correct
-          (arg_directives @ [Sub (RegImm (rax, Encode.from_int 1))]) )
+          (arg_directives @ [Sub (RegImm (Rax, Encode.from_int 1))]) )
   | If {conditional; consequent; alternative} -> (
       let else_label = gensym "else" in
       let continue_label = gensym "continue" in
@@ -111,7 +109,7 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
           | Correct alternative_directives ->
               Correct
                 ( conditional_directives
-                @ [ Cmp (RegImm (rax, Encode.from_bool false))
+                @ [ Cmp (RegImm (Rax, Encode.from_bool false))
                   ; Jz else_label ]
                 @ consequent_directives @ [Jmp continue_label]
                 @ [Label else_label] @ alternative_directives
@@ -128,10 +126,10 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
           let arg1_memory_address = stack_address stack_index in
           Correct
             ( arg1_directives
-            @ [Mov (MemReg (arg1_memory_address, rax))]
+            @ [Mov (MemReg (arg1_memory_address, Rax))]
             @ arg2_directives
-            @ [Mov (RegMem (r8, arg1_memory_address))]
-            @ [Add (RegReg (rax, r8))] ) ) )
+            @ [Mov (RegMem (R8, arg1_memory_address))]
+            @ [Add (RegReg (Rax, R8))] ) ) )
   | Sub (arg1, arg2) -> (
     match compile_body symbol_table stack_index arg1 with
     | Error ->
@@ -144,10 +142,10 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
           let arg1_memory_address = stack_address stack_index in
           Correct
             ( arg1_directives
-            @ [Mov (MemReg (arg1_memory_address, rax))]
+            @ [Mov (MemReg (arg1_memory_address, Rax))]
             @ arg2_directives
-            @ [Mov (RegMem (r8, arg1_memory_address))]
-            @ [Sub (RegReg (rax, r8))] ) ) )
+            @ [Mov (RegMem (R8, arg1_memory_address))]
+            @ [Sub (RegReg (Rax, R8))] ) ) )
   | Eq (arg1, arg2) -> (
     match compile_body symbol_table stack_index arg1 with
     | Error ->
@@ -160,10 +158,10 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
           let arg1_memory_address = stack_address stack_index in
           Correct
             ( arg1_directives
-            @ [Mov (MemReg (arg1_memory_address, rax))]
+            @ [Mov (MemReg (arg1_memory_address, Rax))]
             @ arg2_directives
-            @ [Mov (RegMem (r8, arg1_memory_address))]
-            @ [Cmp (RegReg (rax, r8))]
+            @ [Mov (RegMem (R8, arg1_memory_address))]
+            @ [Cmp (RegReg (Rax, R8))]
             @ zf_to_bool ) ) )
   | Lt (arg1, arg2) -> (
     match compile_body symbol_table stack_index arg1 with
@@ -177,10 +175,10 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
           let arg1_memory_address = stack_address stack_index in
           Correct
             ( arg1_directives
-            @ [Mov (MemReg (arg1_memory_address, rax))]
+            @ [Mov (MemReg (arg1_memory_address, Rax))]
             @ arg2_directives
-            @ [Mov (RegMem (r8, arg1_memory_address))]
-            @ [Cmp (RegReg (r8, rax))]
+            @ [Mov (RegMem (R8, arg1_memory_address))]
+            @ [Cmp (RegReg (R8, Rax))]
             @ lf_to_bool ) ) )
   | Let {name; value; body} -> (
     match compile_body symbol_table stack_index value with
@@ -197,14 +195,51 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
       | Correct body_directives ->
           Correct
             ( value_directives
-            @ [Mov (MemReg (stack_address stack_index, rax))]
+            @ [Mov (MemReg (stack_address stack_index, Rax))]
             @ body_directives ) ) )
   | Var name -> (
     match Symtab.find_opt name symbol_table with
     | None ->
         Error
     | Some location ->
-        Correct [Mov (RegMem (rax, stack_address location))] )
+        Correct [Mov (RegMem (Rax, stack_address location))] )
+  | Pair (left, right) -> (
+    match compile_body symbol_table stack_index left with
+    | Error ->
+        Error
+    | Correct left_directives -> (
+      match compile_body symbol_table (stack_index - 8) right with
+      | Error ->
+          Error
+      | Correct right_directives ->
+          let left_memory_address = stack_address stack_index in
+          Correct
+            ( left_directives
+            @ [Mov (MemReg (left_memory_address, Rax))]
+            @ right_directives
+            @ [ Mov (RegMem (R8, left_memory_address))
+              ; Mov (MemReg (Reg Rdi, R8))
+              ; Mov (MemReg (RegImm (Rdi, 8), Rax))
+              ; Mov (RegReg (Rax, Rdi))
+              ; Or (RegImm (Rax, Encode.pair_tag))
+              ; Add (RegImm (Rdi, 16)) ] ) ) )
+  | Left arg -> (
+    match compile_body symbol_table stack_index arg with
+    | Error ->
+        Error
+    | Correct arg_directives ->
+        Correct
+          ( arg_directives
+          @ [Mov (RegMem (Rax, RegImm (Rax, -Encode.pair_tag)))] ) )
+  | Right arg -> (
+    match compile_body symbol_table stack_index arg with
+    | Error ->
+        Error
+    | Correct arg_directives ->
+        Correct
+          ( arg_directives
+          @ [Mov (RegMem (Rax, RegImm (Rax, -Encode.pair_tag + 8)))]
+          ) )
 
 let compile (expression : lisp_expression) : directive list =
   let symbol_table = Symtab.empty in

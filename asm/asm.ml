@@ -1,19 +1,13 @@
-type register_kind = Rax | Rcx | R8 | Rsp | Rdi
-
-type register = {kind: register_kind; last_byte: bool}
-
-let create_register (kind : register_kind) (last_byte : bool) :
-    register =
-  {kind; last_byte}
+type register = Rax | Rcx | R8 | Rsp | Rdi
 
 let register_to_string (reg : register) : string =
-  match reg.kind with
+  match reg with
   | Rax ->
-      if reg.last_byte then "al" else "rax"
+      "rax"
   | Rcx ->
-      if reg.last_byte then "cl" else "rcx"
+      "rcx"
   | R8 ->
-      if reg.last_byte then "r8b" else "r8"
+      "r8"
   | Rsp ->
       "rsp"
   | Rdi ->
@@ -37,8 +31,7 @@ let memory_to_string (mem : memory_address) : string =
   "[" ^ body ^ "]"
 
 let stack_address (stack_index : int) : memory_address =
-  let rsp = create_register Rsp false in
-  RegImm (rsp, stack_index)
+  RegImm (Rsp, stack_index)
 
 type dest_src =
   | RegImm of register * int

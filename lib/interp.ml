@@ -1,14 +1,17 @@
 open Lisp_expression
 open Util
 
-type value = Number of int | Boolean of bool
+type value = Number of int | Boolean of bool | Pair of value * value
 
-let value_to_string (v : value) : string =
+let rec value_to_string (v : value) : string =
   match v with
   | Number n ->
       string_of_int n
   | Boolean b ->
       if b then "true" else "false"
+  | Pair (left, right) ->
+      Printf.sprintf "(pair %s %s)" (value_to_string left)
+        (value_to_string right)
 
 type interpret_result = Correct of value | Error
 
@@ -48,7 +51,7 @@ let rec interpret (env : value Symtab.t) (expression : lisp_expression)
       match arg_value with
       | Number _ ->
           Correct (Boolean true)
-      | Boolean _ ->
+      | Boolean _ | Pair _ ->
           Correct (Boolean false) ) )
   | Add1 arg -> (
     match interpret env arg with
@@ -58,7 +61,7 @@ let rec interpret (env : value Symtab.t) (expression : lisp_expression)
       match arg_value with
       | Number n ->
           Correct (Number (n + 1))
-      | Boolean _ ->
+      | Boolean _ | Pair _ ->
           Error ) )
   | Sub1 arg -> (
     match interpret env arg with
@@ -68,7 +71,7 @@ let rec interpret (env : value Symtab.t) (expression : lisp_expression)
       match arg_value with
       | Number n ->
           Correct (Number (n - 1))
-      | Boolean _ ->
+      | Boolean _ | Pair _ ->
           Error ) )
   | If {conditional; consequent; alternative} -> (
     match interpret env conditional with
@@ -78,7 +81,7 @@ let rec interpret (env : value Symtab.t) (expression : lisp_expression)
       match conditional_value with
       | Boolean false ->
           interpret env alternative
-      | Boolean true | Number _ ->
+      | Boolean true | Number _ | Pair _ ->
           interpret env consequent ) )
   | Add (operand1, operand2) -> (
     match interpret env operand1 with
@@ -86,36 +89,36 @@ let rec interpret (env : value Symtab.t) (expression : lisp_expression)
         Error
     | Correct operand1_value -> (
       match operand1_value with
+      | Boolean _ | Pair _ ->
+          Error
       | Number n1 -> (
         match interpret env operand2 with
         | Error ->
             Error
         | Correct operand2_value -> (
           match operand2_value with
+          | Boolean _ | Pair _ ->
+              Error
           | Number n2 ->
-              Correct (Number (n1 + n2))
-          | _ ->
-              Error ) )
-      | _ ->
-          Error ) )
+              Correct (Number (n1 + n2)) ) ) ) )
   | Sub (operand1, operand2) -> (
     match interpret env operand1 with
     | Error ->
         Error
     | Correct operand1_value -> (
       match operand1_value with
+      | Boolean _ | Pair _ ->
+          Error
       | Number n1 -> (
         match interpret env operand2 with
         | Error ->
             Error
         | Correct operand2_value -> (
           match operand2_value with
+          | Boolean _ | Pair _ ->
+              Error
           | Number n2 ->
-              Correct (Number (n1 - n2))
-          | _ ->
-              Error ) )
-      | _ ->
-          Error ) )
+              Correct (Number (n1 - n2)) ) ) ) )
   | Eq (operand1, operand2) -> (
     match interpret env operand1 with
     | Error ->
@@ -132,18 +135,18 @@ let rec interpret (env : value Symtab.t) (expression : lisp_expression)
         Error
     | Correct operand1_value -> (
       match operand1_value with
+      | Boolean _ | Pair _ ->
+          Error
       | Number n1 -> (
         match interpret env operand2 with
         | Error ->
             Error
         | Correct operand2_value -> (
           match operand2_value with
+          | Boolean _ | Pair _ ->
+              Error
           | Number n2 ->
-              Correct (Boolean (n1 < n2))
-          | _ ->
-              Error ) )
-      | _ ->
-          Error ) )
+              Correct (Boolean (n1 < n2)) ) ) ) )
   | Var name -> (
     match Symtab.find_opt name env with
     | None ->
@@ -157,3 +160,33 @@ let rec interpret (env : value Symtab.t) (expression : lisp_expression)
     | Correct value ->
         let new_env = Symtab.add name value env in
         interpret new_env body )
+  | Pair (left, right) -> (
+    match interpret env left with
+    | Error ->
+        Error
+    | Correct left_value -> (
+      match interpret env right with
+      | Error ->
+          Error
+      | Correct right_value ->
+          Correct (Pair (left_value, right_value)) ) )
+  | Left arg -> (
+    match interpret env arg with
+    | Error ->
+        Error
+    | Correct arg_value -> (
+      match arg_value with
+      | Number _ | Boolean _ ->
+          Error
+      | Pair (left, _) ->
+          Correct left ) )
+  | Right arg -> (
+    match interpret env arg with
+    | Error ->
+        Error
+    | Correct arg_value -> (
+      match arg_value with
+      | Number _ | Boolean _ ->
+          Error
+      | Pair (_, right) ->
+          Correct right ) )
