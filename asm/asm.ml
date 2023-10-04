@@ -19,12 +19,12 @@ let register_to_string (reg : register) : string =
   | Rdi ->
       "rdi"
 
-type memory =
+type memory_address =
   | Reg of register
   | Imm of int
   | RegImm of register * int
 
-let memory_to_string (mem : memory) : string =
+let memory_to_string (mem : memory_address) : string =
   let body =
     match mem with
     | Reg reg ->
@@ -36,12 +36,16 @@ let memory_to_string (mem : memory) : string =
   in
   "[" ^ body ^ "]"
 
+let stack_address (stack_index : int) : memory_address =
+  let rsp = create_register Rsp false in
+  RegImm (rsp, stack_index)
+
 type dest_src =
   | RegImm of register * int
   | RegReg of register * register
-  | RegMem of register * memory
-  | MemReg of memory * register
-  | MemImm of memory * int
+  | RegMem of register * memory_address
+  | MemReg of memory_address * register
+  | MemImm of memory_address * int
 
 let dest_src_to_string (dest_src : dest_src) : string * string =
   match dest_src with

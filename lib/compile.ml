@@ -43,83 +43,176 @@ let lf_to_bool : directive list =
   ; Shl (RegImm (rax, Encode.bool_shift))
   ; Or (RegImm (rax, Encode.bool_tag)) ]
 
-let rec compile_body (stack_index : int) (expression : lisp_expression)
-    : directive list =
+type compile_body_result = Error | Correct of directive list
+
+let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
+    (expression : lisp_expression) : compile_body_result =
   match expression with
   | Number n ->
-      [Mov (RegImm (rax, Encode.from_int n))]
+      Correct [Mov (RegImm (rax, Encode.from_int n))]
   | Boolean b ->
-      [Mov (RegImm (rax, Encode.from_bool b))]
-  | Not arg ->
-      compile_body stack_index arg
-      @ [Cmp (RegImm (rax, Encode.from_bool false))]
-      @ zf_to_bool
-  | Is_zero arg ->
-      compile_body stack_index arg
-      @ [Cmp (RegImm (rax, Encode.from_int 0))]
-      @ zf_to_bool
-  | Is_num arg ->
-      compile_body stack_index arg
-      @ [ And (RegImm (rax, Encode.num_mask))
-        ; Cmp (RegImm (rax, Encode.num_tag)) ]
-      @ zf_to_bool
-  | Add1 arg ->
-      compile_body stack_index arg
-      @ [Add (RegImm (rax, Encode.from_int 1))]
-  | Sub1 arg ->
-      compile_body stack_index arg
-      @ [Sub (RegImm (rax, Encode.from_int 1))]
-  | If {conditional; consequent; alternative} ->
+      Correct [Mov (RegImm (rax, Encode.from_bool b))]
+  | Not arg -> (
+    match compile_body symbol_table stack_index arg with
+    | Error ->
+        Error
+    | Correct arg_directives ->
+        Correct
+          ( arg_directives
+          @ [Cmp (RegImm (rax, Encode.from_bool false))]
+          @ zf_to_bool ) )
+  | Is_zero arg -> (
+    match compile_body symbol_table stack_index arg with
+    | Error ->
+        Error
+    | Correct arg_directives ->
+        Correct
+          ( arg_directives
+          @ [Cmp (RegImm (rax, Encode.from_int 0))]
+          @ zf_to_bool ) )
+  | Is_num arg -> (
+    match compile_body symbol_table stack_index arg with
+    | Error ->
+        Error
+    | Correct arg_directives ->
+        Correct
+          ( arg_directives
+          @ [ And (RegImm (rax, Encode.num_mask))
+            ; Cmp (RegImm (rax, Encode.num_tag)) ]
+          @ zf_to_bool ) )
+  | Add1 arg -> (
+    match compile_body symbol_table stack_index arg with
+    | Error ->
+        Error
+    | Correct arg_directives ->
+        Correct
+          (arg_directives @ [Add (RegImm (rax, Encode.from_int 1))]) )
+  | Sub1 arg -> (
+    match compile_body symbol_table stack_index arg with
+    | Error ->
+        Error
+    | Correct arg_directives ->
+        Correct
+          (arg_directives @ [Sub (RegImm (rax, Encode.from_int 1))]) )
+  | If {conditional; consequent; alternative} -> (
       let else_label = gensym "else" in
       let continue_label = gensym "continue" in
-      compile_body stack_index conditional
-      @ [Cmp (RegImm (rax, Encode.from_bool false)); Jz else_label]
-      @ compile_body stack_index consequent
-      @ [Jmp continue_label] @ [Label else_label]
-      @ compile_body stack_index alternative
-      @ [Label continue_label]
-  | Add (arg1, arg2) ->
-      let arg1_directives = compile_body stack_index arg1 in
-      let arg1_memory_location : memory = RegImm (rsp, stack_index) in
-      let arg2_directives = compile_body (stack_index - 8) arg2 in
-      arg1_directives
-      @ [Mov (MemReg (arg1_memory_location, rax))]
-      @ arg2_directives
-      @ [Mov (RegMem (r8, arg1_memory_location))]
-      @ [Add (RegReg (rax, r8))]
-  | Sub (arg1, arg2) ->
-      let arg1_directives = compile_body stack_index arg1 in
-      let arg1_memory_location : memory = RegImm (rsp, stack_index) in
-      let arg2_directives = compile_body (stack_index - 8) arg2 in
-      arg1_directives
-      @ [Mov (MemReg (arg1_memory_location, rax))]
-      @ arg2_directives
-      @ [Mov (RegMem (r8, arg1_memory_location))]
-      @ [Sub (RegReg (rax, r8))]
-  | Eq (arg1, arg2) ->
-      let arg1_directives = compile_body stack_index arg1 in
-      let arg1_memory_location : memory = RegImm (rsp, stack_index) in
-      let arg2_directives = compile_body (stack_index - 8) arg2 in
-      arg1_directives
-      @ [Mov (MemReg (arg1_memory_location, rax))]
-      @ arg2_directives
-      @ [Mov (RegMem (r8, arg1_memory_location))]
-      @ [Cmp (RegReg (rax, r8))]
-      @ zf_to_bool
-  | Lt (arg1, arg2) ->
-      let arg1_directives = compile_body stack_index arg1 in
-      let arg1_memory_location : memory = RegImm (rsp, stack_index) in
-      let arg2_directives = compile_body (stack_index - 8) arg2 in
-      arg1_directives
-      @ [Mov (MemReg (arg1_memory_location, rax))]
-      @ arg2_directives
-      @ [Mov (RegMem (r8, arg1_memory_location))]
-      @ [Cmp (RegReg (r8, rax))]
-      @ lf_to_bool
+      match compile_body symbol_table stack_index conditional with
+      | Error ->
+          Error
+      | Correct conditional_directives -> (
+        match compile_body symbol_table stack_index consequent with
+        | Error ->
+            Error
+        | Correct consequent_directives -> (
+          match compile_body symbol_table stack_index alternative with
+          | Error ->
+              Error
+          | Correct alternative_directives ->
+              Correct
+                ( conditional_directives
+                @ [ Cmp (RegImm (rax, Encode.from_bool false))
+                  ; Jz else_label ]
+                @ consequent_directives @ [Jmp continue_label]
+                @ [Label else_label] @ alternative_directives
+                @ [Label continue_label] ) ) ) )
+  | Add (arg1, arg2) -> (
+    match compile_body symbol_table stack_index arg1 with
+    | Error ->
+        Error
+    | Correct arg1_directives -> (
+      match compile_body symbol_table (stack_index - 8) arg2 with
+      | Error ->
+          Error
+      | Correct arg2_directives ->
+          let arg1_memory_address = stack_address stack_index in
+          Correct
+            ( arg1_directives
+            @ [Mov (MemReg (arg1_memory_address, rax))]
+            @ arg2_directives
+            @ [Mov (RegMem (r8, arg1_memory_address))]
+            @ [Add (RegReg (rax, r8))] ) ) )
+  | Sub (arg1, arg2) -> (
+    match compile_body symbol_table stack_index arg1 with
+    | Error ->
+        Error
+    | Correct arg1_directives -> (
+      match compile_body symbol_table (stack_index - 8) arg2 with
+      | Error ->
+          Error
+      | Correct arg2_directives ->
+          let arg1_memory_address = stack_address stack_index in
+          Correct
+            ( arg1_directives
+            @ [Mov (MemReg (arg1_memory_address, rax))]
+            @ arg2_directives
+            @ [Mov (RegMem (r8, arg1_memory_address))]
+            @ [Sub (RegReg (rax, r8))] ) ) )
+  | Eq (arg1, arg2) -> (
+    match compile_body symbol_table stack_index arg1 with
+    | Error ->
+        Error
+    | Correct arg1_directives -> (
+      match compile_body symbol_table (stack_index - 8) arg2 with
+      | Error ->
+          Error
+      | Correct arg2_directives ->
+          let arg1_memory_address = stack_address stack_index in
+          Correct
+            ( arg1_directives
+            @ [Mov (MemReg (arg1_memory_address, rax))]
+            @ arg2_directives
+            @ [Mov (RegMem (r8, arg1_memory_address))]
+            @ [Cmp (RegReg (rax, r8))]
+            @ zf_to_bool ) ) )
+  | Lt (arg1, arg2) -> (
+    match compile_body symbol_table stack_index arg1 with
+    | Error ->
+        Error
+    | Correct arg1_directives -> (
+      match compile_body symbol_table (stack_index - 8) arg2 with
+      | Error ->
+          Error
+      | Correct arg2_directives ->
+          let arg1_memory_address = stack_address stack_index in
+          Correct
+            ( arg1_directives
+            @ [Mov (MemReg (arg1_memory_address, rax))]
+            @ arg2_directives
+            @ [Mov (RegMem (r8, arg1_memory_address))]
+            @ [Cmp (RegReg (r8, rax))]
+            @ lf_to_bool ) ) )
+  | Let {name; value; body} -> (
+    match compile_body symbol_table stack_index value with
+    | Error ->
+        Error
+    | Correct value_directives -> (
+      match
+        compile_body
+          (Symtab.add name stack_index symbol_table)
+          (stack_index - 8) body
+      with
+      | Error ->
+          Error
+      | Correct body_directives ->
+          Correct
+            ( value_directives
+            @ [Mov (MemReg (stack_address stack_index, rax))]
+            @ body_directives ) ) )
+  | Var name -> (
+    match Symtab.find_opt name symbol_table with
+    | None ->
+        Error
+    | Some location ->
+        Correct [Mov (RegMem (rax, stack_address location))] )
 
 let compile (expression : lisp_expression) : directive list =
-  let body = compile_body (-8) expression in
-  [Global "entry"; Label "entry"] @ body
+  let symbol_table = Symtab.empty in
+  match compile_body symbol_table (-8) expression with
+  | Error ->
+      failwith ""
+  | Correct body ->
+      [Global "entry"; Label "entry"] @ body
 
 let run (expression : lisp_expression) : string =
   let assembly =
