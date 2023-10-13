@@ -1,4 +1,4 @@
 (library
  (name csci1260)
- (modules compile interp test util lisp_expression)
+ (modules compile interp test util lisp_expression encode)
  (libraries unix s_exp asm))
