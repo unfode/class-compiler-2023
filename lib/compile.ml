@@ -2,52 +2,57 @@ open Asm
 open Util
 open Lisp_expression
 
-module Encode = struct
-  let num_shift = 2
+module Encode : sig
+  type datatype_spec = {shift: int; mask: int; tag: int}
 
-  let num_mask = 0b11
+  val num_spec : datatype_spec
 
-  let num_tag = 0b00
+  val bool_spec : datatype_spec
 
-  let bool_shift = 7
+  val pair_spec : datatype_spec
 
-  let bool_mask = 0b1111111
+  val from_int : int -> int
 
-  let bool_tag = 0b0011111
+  val from_bool : bool -> int
+end = struct
+  type datatype_spec = {shift: int; mask: int; tag: int}
 
-  let pair_tag = 0b010
+  let num_spec : datatype_spec = {shift= 2; mask= 0b11; tag= 0b00}
 
-  let heap_mask = 0b111
+  let bool_spec : datatype_spec =
+    {shift= 7; mask= 0b1111111; tag= 0b0011111}
 
-  let encode (value : int) (shift : int) (tag : int) : int =
-    (value lsl shift) lor tag
+  let pair_spec : datatype_spec = {shift= 3; mask= 0b111; tag= 0b010}
 
-  let from_int (n : int) : int = encode n num_shift num_tag
+  let encode (value : int) (spec : datatype_spec) : int =
+    (value lsl spec.shift) lor spec.tag
+
+  let from_int (n : int) : int = encode n num_spec
 
   let from_bool (b : bool) : int =
     let bit = if b then 1 else 0 in
-    encode bit bool_shift bool_tag
+    encode bit bool_spec
 end
 
 let zf_to_bool : directive list =
   [ Mov (RegImm (Rax, 0))
   ; Setz Rax
-  ; Shl (RegImm (Rax, Encode.bool_shift))
-  ; Or (RegImm (Rax, Encode.bool_tag)) ]
+  ; Shl (RegImm (Rax, Encode.bool_spec.shift))
+  ; Or (RegImm (Rax, Encode.bool_spec.tag)) ]
 
 let lf_to_bool : directive list =
   [ Mov (RegImm (Rax, 0))
   ; Setl Rax
-  ; Shl (RegImm (Rax, Encode.bool_shift))
-  ; Or (RegImm (Rax, Encode.bool_tag)) ]
+  ; Shl (RegImm (Rax, Encode.bool_spec.shift))
+  ; Or (RegImm (Rax, Encode.bool_spec.tag)) ]
 
 let error_function_name : string = "error"
 
 let assert_is_number (target : register) (temporary : register) :
     directive list =
   [ Mov (RegReg (temporary, target))
-  ; And (RegImm (temporary, Encode.num_mask))
-  ; Cmp (RegImm (temporary, Encode.num_tag))
+  ; And (RegImm (temporary, Encode.num_spec.mask))
+  ; Cmp (RegImm (temporary, Encode.num_spec.tag))
   ; Jnz error_function_name ]
 
 type compile_body_result = Error | Correct of directive list
@@ -84,8 +89,8 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
     | Correct arg_directives ->
         Correct
           ( arg_directives
-          @ [ And (RegImm (Rax, Encode.num_mask))
-            ; Cmp (RegImm (Rax, Encode.num_tag)) ]
+          @ [ And (RegImm (Rax, Encode.num_spec.mask))
+            ; Cmp (RegImm (Rax, Encode.num_spec.tag)) ]
           @ zf_to_bool ) )
   | Add1 arg -> (
     match compile_body symbol_table stack_index arg with
@@ -232,7 +237,7 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
               ; Mov (MemReg (Reg Rdi, R8))
               ; Mov (MemReg (RegImm (Rdi, 8), Rax))
               ; Mov (RegReg (Rax, Rdi))
-              ; Or (RegImm (Rax, Encode.pair_tag))
+              ; Or (RegImm (Rax, Encode.pair_spec.tag))
               ; Add (RegImm (Rdi, 16)) ] ) ) )
   | Left arg -> (
     match compile_body symbol_table stack_index arg with
@@ -241,7 +246,8 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
     | Correct arg_directives ->
         Correct
           ( arg_directives
-          @ [Mov (RegMem (Rax, RegImm (Rax, -Encode.pair_tag)))] ) )
+          @ [Mov (RegMem (Rax, RegImm (Rax, -Encode.pair_spec.tag)))]
+          ) )
   | Right arg -> (
     match compile_body symbol_table stack_index arg with
     | Error ->
@@ -249,8 +255,9 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
     | Correct arg_directives ->
         Correct
           ( arg_directives
-          @ [Mov (RegMem (Rax, RegImm (Rax, -Encode.pair_tag + 8)))]
-          ) )
+          @ [ Mov
+                (RegMem (Rax, RegImm (Rax, -Encode.pair_spec.tag + 8)))
+            ] ) )
 
 let compile (expression : lisp_expression) : directive list =
   let symbol_table = Symtab.empty in
