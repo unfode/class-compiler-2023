@@ -30,9 +30,9 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
     (expression : lisp_expression) : compile_body_result =
   match expression with
   | Number n ->
-      Correct [Mov (RegImm (Rax, from_int n))]
+      Correct [Mov (RegImm (Rax, encode_int n))]
   | Boolean b ->
-      Correct [Mov (RegImm (Rax, from_bool b))]
+      Correct [Mov (RegImm (Rax, encode_bool b))]
   | Not arg -> (
     match compile_body symbol_table stack_index arg with
     | Error ->
@@ -40,7 +40,7 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
     | Correct arg_directives ->
         Correct
           ( arg_directives
-          @ [Cmp (RegImm (Rax, from_bool false))]
+          @ [Cmp (RegImm (Rax, encode_bool false))]
           @ zf_to_bool ) )
   | Is_zero arg -> (
     match compile_body symbol_table stack_index arg with
@@ -49,7 +49,7 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
     | Correct arg_directives ->
         Correct
           ( arg_directives
-          @ [Cmp (RegImm (Rax, from_int 0))]
+          @ [Cmp (RegImm (Rax, encode_int 0))]
           @ zf_to_bool ) )
   | Is_num arg -> (
     match compile_body symbol_table stack_index arg with
@@ -68,7 +68,7 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
     | Correct arg_directives ->
         Correct
           ( arg_directives @ assert_is_number Rax R8
-          @ [Add (RegImm (Rax, from_int 1))] ) )
+          @ [Add (RegImm (Rax, encode_int 1))] ) )
   | Sub1 arg -> (
     match compile_body symbol_table stack_index arg with
     | Error ->
@@ -76,7 +76,7 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
     | Correct arg_directives ->
         Correct
           ( arg_directives @ assert_is_number Rax R8
-          @ [Sub (RegImm (Rax, from_int 1))] ) )
+          @ [Sub (RegImm (Rax, encode_int 1))] ) )
   | If {conditional; consequent; alternative} -> (
       let else_label = gensym "else" in
       let continue_label = gensym "continue" in
@@ -94,7 +94,8 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
           | Correct alternative_directives ->
               Correct
                 ( conditional_directives
-                @ [Cmp (RegImm (Rax, from_bool false)); Jz else_label]
+                @ [ Cmp (RegImm (Rax, encode_bool false))
+                  ; Jz else_label ]
                 @ consequent_directives @ [Jmp continue_label]
                 @ [Label else_label] @ alternative_directives
                 @ [Label continue_label] ) ) ) )

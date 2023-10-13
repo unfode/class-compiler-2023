@@ -8,6 +8,6 @@ val bool_spec : datatype_spec
 
 val pair_spec : datatype_spec
 
-val from_int : int -> int
+val encode_int : int -> int
 
-val from_bool : bool -> int
+val encode_bool : bool -> int
