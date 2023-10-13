@@ -43,10 +43,11 @@ let lf_to_bool : directive list =
 
 let error_function_name : string = "error"
 
-let assert_is_number (reg : register) : directive list =
-  [ Mov (RegReg (R8, reg))
-  ; And (RegImm (R8, Encode.num_mask))
-  ; Cmp (RegImm (R8, Encode.num_tag))
+let assert_is_number (target : register) (temporary : register) :
+    directive list =
+  [ Mov (RegReg (temporary, target))
+  ; And (RegImm (temporary, Encode.num_mask))
+  ; Cmp (RegImm (temporary, Encode.num_tag))
   ; Jnz error_function_name ]
 
 type compile_body_result = Error | Correct of directive list
@@ -92,7 +93,7 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
         Error
     | Correct arg_directives ->
         Correct
-          ( arg_directives @ assert_is_number Rax
+          ( arg_directives @ assert_is_number Rax R8
           @ [Add (RegImm (Rax, Encode.from_int 1))] ) )
   | Sub1 arg -> (
     match compile_body symbol_table stack_index arg with
@@ -100,7 +101,7 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
         Error
     | Correct arg_directives ->
         Correct
-          ( arg_directives @ assert_is_number Rax
+          ( arg_directives @ assert_is_number Rax R8
           @ [Sub (RegImm (Rax, Encode.from_int 1))] ) )
   | If {conditional; consequent; alternative} -> (
       let else_label = gensym "else" in
@@ -135,9 +136,9 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
       | Correct arg2_directives ->
           let arg1_memory_address = stack_address stack_index in
           Correct
-            ( arg1_directives @ assert_is_number Rax
+            ( arg1_directives @ assert_is_number Rax R8
             @ [Mov (MemReg (arg1_memory_address, Rax))]
-            @ arg2_directives @ assert_is_number Rax
+            @ arg2_directives @ assert_is_number Rax R8
             @ [Mov (RegMem (R8, arg1_memory_address))]
             @ [Add (RegReg (Rax, R8))] ) ) )
   | Sub (arg1, arg2) -> (
@@ -151,9 +152,9 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
       | Correct arg2_directives ->
           let arg1_memory_address = stack_address stack_index in
           Correct
-            ( arg1_directives @ assert_is_number Rax
+            ( arg1_directives @ assert_is_number Rax R8
             @ [Mov (MemReg (arg1_memory_address, Rax))]
-            @ arg2_directives @ assert_is_number Rax
+            @ arg2_directives @ assert_is_number Rax R8
             @ [Mov (RegMem (R8, arg1_memory_address))]
             @ [Sub (RegReg (Rax, R8))] ) ) )
   | Eq (arg1, arg2) -> (
@@ -184,9 +185,9 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
       | Correct arg2_directives ->
           let arg1_memory_address = stack_address stack_index in
           Correct
-            ( arg1_directives @ assert_is_number Rax
+            ( arg1_directives @ assert_is_number Rax R8
             @ [Mov (MemReg (arg1_memory_address, Rax))]
-            @ arg2_directives @ assert_is_number Rax
+            @ arg2_directives @ assert_is_number Rax R8
             @ [Mov (RegMem (R8, arg1_memory_address))]
             @ [Cmp (RegReg (R8, Rax))]
             @ lf_to_bool ) ) )
