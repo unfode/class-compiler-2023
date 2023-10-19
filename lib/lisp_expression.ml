@@ -22,6 +22,7 @@ type lisp_expression =
   | Pair of lisp_expression * lisp_expression
   | Left of lisp_expression
   | Right of lisp_expression
+  | Read_num
 
 let rec s_exp_to_lisp_expression (s_expression : s_exp) :
     lisp_expression option =
@@ -32,6 +33,8 @@ let rec s_exp_to_lisp_expression (s_expression : s_exp) :
       Some (Boolean true)
   | Sym "false" ->
       Some (Boolean false)
+  | Sym var ->
+      Some (Var var)
   | Lst [Sym "let"; Lst [Lst [Sym s; e]]; body] -> (
     match
       (s_exp_to_lisp_expression e, s_exp_to_lisp_expression body)
@@ -40,8 +43,8 @@ let rec s_exp_to_lisp_expression (s_expression : s_exp) :
         Some (Let {name= s; value; body})
     | _ ->
         None )
-  | Sym var ->
-      Some (Var var)
+  | Lst [Sym "read-num"] ->
+      Some Read_num
   | Lst [Sym "not"; arg] -> (
     match s_exp_to_lisp_expression arg with
     | None ->

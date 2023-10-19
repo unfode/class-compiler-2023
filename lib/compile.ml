@@ -17,12 +17,17 @@ let lf_to_bool : directive list =
 
 let error_function_name : string = "error"
 
+let read_num_function_name : string = "read_num"
+
 let assert_is_number (target : register) (temporary : register) :
     directive list =
   [ Mov (RegReg (temporary, target))
   ; And (RegImm (temporary, get_mask num_spec))
   ; Cmp (RegImm (temporary, num_spec.tag))
   ; Jnz error_function_name ]
+
+let align_stack_index (stack_index : int) : int =
+  if stack_index mod 16 = -8 then stack_index else stack_index - 8
 
 type compile_body_result = Error | Correct of directive list
 
@@ -224,6 +229,11 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
         Correct
           ( arg_directives
           @ [Mov (RegMem (Rax, RegImm (Rax, -pair_spec.tag + 8)))] ) )
+  | Read_num ->
+      Correct
+        [ Add (RegImm (Rsp, align_stack_index stack_index))
+        ; Call read_num_function_name
+        ; Sub (RegImm (Rsp, align_stack_index stack_index)) ]
 
 let compile (expression : lisp_expression) : directive list =
   let symbol_table = Symtab.empty in
@@ -231,7 +241,11 @@ let compile (expression : lisp_expression) : directive list =
   | Error ->
       failwith ""
   | Correct body ->
-      [Global "entry"; Extern "error"; Label "entry"] @ body @ [Ret]
+      [ Global "entry"
+      ; Extern "error"
+      ; Extern "read_num"
+      ; Label "entry" ]
+      @ body @ [Ret]
 
 let run (expression : lisp_expression) : string =
   let assembly =

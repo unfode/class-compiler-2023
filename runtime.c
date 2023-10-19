@@ -17,6 +17,13 @@ void error()
     exit(1);
 }
 
+uint64_t read_num()
+{
+    int r;
+    scanf("%d", &r);
+    return (uint64_t)(r) << num_shift;
+}
+
 void print_value(uint64_t value)
 {
     if ((value & num_mask) == num_tag)

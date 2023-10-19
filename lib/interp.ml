@@ -190,3 +190,9 @@ let rec interpret (env : value Symtab.t) (expression : lisp_expression)
           Error
       | Pair (_, right) ->
           Correct right ) )
+  | Read_num -> (
+    match input_line stdin |> int_of_string_opt with
+    | None ->
+        Error
+    | Some n ->
+        Correct (Number n) )
