@@ -231,9 +231,11 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
           @ [Mov (RegMem (Rax, RegImm (Rax, -pair_spec.tag + 8)))] ) )
   | Read_num ->
       Correct
-        [ Add (RegImm (Rsp, align_stack_index stack_index))
+        [ Mov (MemReg (stack_address stack_index, Rdi))
+        ; Add (RegImm (Rsp, align_stack_index stack_index))
         ; Call read_num_function_name
-        ; Sub (RegImm (Rsp, align_stack_index stack_index)) ]
+        ; Sub (RegImm (Rsp, align_stack_index stack_index))
+        ; Mov (RegMem (Rdi, stack_address stack_index)) ]
 
 let compile (expression : lisp_expression) : directive list =
   let symbol_table = Symtab.empty in
