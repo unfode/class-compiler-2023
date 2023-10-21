@@ -19,12 +19,16 @@ let error_function_name : string = "error"
 
 let read_num_function_name : string = "read_num"
 
+let assert_type (target : register) (temporary : register)
+    (spec : datatype_spec) : directive list =
+  [ Mov (RegReg (temporary, target))
+  ; And (RegImm (temporary, get_mask spec))
+  ; Cmp (RegImm (temporary, spec.tag))
+  ; Jnz error_function_name ]
+
 let assert_is_number (target : register) (temporary : register) :
     directive list =
-  [ Mov (RegReg (temporary, target))
-  ; And (RegImm (temporary, get_mask num_spec))
-  ; Cmp (RegImm (temporary, num_spec.tag))
-  ; Jnz error_function_name ]
+  assert_type target temporary num_spec
 
 let align_stack_index (stack_index : int) : int =
   if stack_index mod 16 = -8 then stack_index else stack_index - 8
