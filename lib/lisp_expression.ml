@@ -23,6 +23,9 @@ type lisp_expression =
   | Left of lisp_expression
   | Right of lisp_expression
   | Read_num
+  | Print of lisp_expression
+  | New_line
+  | Do of lisp_expression list
 
 let rec s_exp_to_lisp_expression (s_expression : s_exp) :
     lisp_expression option =
@@ -45,6 +48,14 @@ let rec s_exp_to_lisp_expression (s_expression : s_exp) :
         None )
   | Lst [Sym "read-num"] ->
       Some Read_num
+  | Lst [Sym "newline"] ->
+      Some New_line
+  | Lst [Sym "print"; arg] -> (
+    match s_exp_to_lisp_expression arg with
+    | None ->
+        None
+    | Some arg_expr ->
+        Some (Print arg_expr) )
   | Lst [Sym "not"; arg] -> (
     match s_exp_to_lisp_expression arg with
     | None ->

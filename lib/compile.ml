@@ -19,6 +19,10 @@ let error_function_name : string = "error"
 
 let read_num_function_name : string = "read_num"
 
+let print_function_name : string = "print_value"
+
+let print_newline_function_name : string = "print_newline"
+
 let assert_type (target : register) (temporary : register)
     (spec : datatype_spec) : directive list =
   [ Mov (RegReg (temporary, target))
@@ -240,6 +244,42 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
         ; Call read_num_function_name
         ; Sub (RegImm (Rsp, align_stack_index stack_index))
         ; Mov (RegMem (Rdi, stack_address stack_index)) ]
+  | New_line ->
+      Correct
+        [ Mov (MemReg (stack_address stack_index, Rdi))
+        ; Add (RegImm (Rsp, align_stack_index stack_index))
+        ; Call print_newline_function_name
+        ; Sub (RegImm (Rsp, align_stack_index stack_index))
+        ; Mov (RegMem (Rdi, stack_address stack_index))
+        ; Mov (RegImm (Rax, encode_bool true)) ]
+  | Print arg -> (
+    match compile_body symbol_table stack_index arg with
+    | Error ->
+        Error
+    | Correct arg_directives ->
+        Correct
+          ( arg_directives
+          @ [ Mov (MemReg (stack_address stack_index, Rdi))
+            ; Mov (RegReg (Rdi, Rax))
+            ; Add (RegImm (Rsp, align_stack_index stack_index))
+            ; Call print_function_name
+            ; Sub (RegImm (Rsp, align_stack_index stack_index))
+            ; Mov (RegMem (Rdi, stack_address stack_index))
+            ; Mov (RegImm (Rax, encode_bool true)) ] ) )
+  | Do args ->
+      List.fold_left
+        (fun result arg ->
+          match result with
+          | Error ->
+              Error
+          | Correct directives -> (
+            match compile_body symbol_table stack_index arg with
+            | Error ->
+                Error
+            | Correct arg_directives ->
+                Correct (directives @ arg_directives) ) )
+        (Correct [Mov (RegImm (Rax, encode_bool true))])
+        args
 
 let compile (expression : lisp_expression) : directive list =
   let symbol_table = Symtab.empty in
@@ -248,8 +288,10 @@ let compile (expression : lisp_expression) : directive list =
       failwith ""
   | Correct body ->
       [ Global "entry"
-      ; Extern "error"
-      ; Extern "read_num"
+      ; Extern error_function_name
+      ; Extern read_num_function_name
+      ; Extern print_newline_function_name
+      ; Extern print_function_name
       ; Label "entry" ]
       @ body @ [Ret]
 

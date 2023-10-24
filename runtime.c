@@ -17,6 +17,11 @@ void error()
     exit(1);
 }
 
+void print_newline()
+{
+    printf("\n");
+}
+
 uint64_t read_num()
 {
     int r;
