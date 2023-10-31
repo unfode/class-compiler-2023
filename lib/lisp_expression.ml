@@ -1,4 +1,5 @@
 open S_exp
+open Util
 
 type lisp_expression =
   | Number of int
@@ -26,6 +27,12 @@ type lisp_expression =
   | Print of lisp_expression
   | New_line
   | Do of lisp_expression list
+  | Call of {function_name: string; arguments: lisp_expression list}
+
+type definition = {args: string list; body: lisp_expression}
+
+type program =
+  {definitions: definition Symtab.t; body: lisp_expression}
 
 let rec s_exp_to_lisp_expression (s_expression : s_exp) :
     lisp_expression option =
@@ -144,5 +151,25 @@ let rec s_exp_to_lisp_expression (s_expression : s_exp) :
           None
       | Some arg2_lisp_expr ->
           Some (Lt (arg1_lisp_expr, arg2_lisp_expr)) ) )
+  | Lst (Sym f :: args) -> (
+      let args =
+        List.fold_left
+          (fun result arg ->
+            match result with
+            | None ->
+                None
+            | Some arg_exprs -> (
+              match s_exp_to_lisp_expression arg with
+              | None ->
+                  None
+              | Some arg_expr ->
+                  Some (arg_exprs @ [arg_expr]) ) )
+          (Some []) args
+      in
+      match args with
+      | None ->
+          None
+      | Some arg_exprs ->
+          Some (Call {function_name= f; arguments= arg_exprs}) )
   | _ ->
       None

@@ -37,17 +37,18 @@ let assert_is_number (target : register) (temporary : register) :
 let align_stack_index (stack_index : int) : int =
   if stack_index mod 16 = -8 then stack_index else stack_index - 8
 
-type compile_body_result = Error | Correct of directive list
+type compile_result = Error | Correct of directive list
 
-let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
-    (expression : lisp_expression) : compile_body_result =
+let rec compile_body (definitions : definition Symtab.t)
+    (symbol_table : int Symtab.t) (stack_index : int)
+    (expression : lisp_expression) : compile_result =
   match expression with
   | Number n ->
       Correct [Mov (RegImm (Rax, encode_int n))]
   | Boolean b ->
       Correct [Mov (RegImm (Rax, encode_bool b))]
   | Not arg -> (
-    match compile_body symbol_table stack_index arg with
+    match compile_body definitions symbol_table stack_index arg with
     | Error ->
         Error
     | Correct arg_directives ->
@@ -56,7 +57,7 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
           @ [Cmp (RegImm (Rax, encode_bool false))]
           @ zf_to_bool ) )
   | Is_zero arg -> (
-    match compile_body symbol_table stack_index arg with
+    match compile_body definitions symbol_table stack_index arg with
     | Error ->
         Error
     | Correct arg_directives ->
@@ -65,7 +66,7 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
           @ [Cmp (RegImm (Rax, encode_int 0))]
           @ zf_to_bool ) )
   | Is_num arg -> (
-    match compile_body symbol_table stack_index arg with
+    match compile_body definitions symbol_table stack_index arg with
     | Error ->
         Error
     | Correct arg_directives ->
@@ -75,7 +76,7 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
             ; Cmp (RegImm (Rax, num_spec.tag)) ]
           @ zf_to_bool ) )
   | Add1 arg -> (
-    match compile_body symbol_table stack_index arg with
+    match compile_body definitions symbol_table stack_index arg with
     | Error ->
         Error
     | Correct arg_directives ->
@@ -83,7 +84,7 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
           ( arg_directives @ assert_is_number Rax R8
           @ [Add (RegImm (Rax, encode_int 1))] ) )
   | Sub1 arg -> (
-    match compile_body symbol_table stack_index arg with
+    match compile_body definitions symbol_table stack_index arg with
     | Error ->
         Error
     | Correct arg_directives ->
@@ -93,15 +94,22 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
   | If {conditional; consequent; alternative} -> (
       let else_label = gensym "else" in
       let continue_label = gensym "continue" in
-      match compile_body symbol_table stack_index conditional with
+      match
+        compile_body definitions symbol_table stack_index conditional
+      with
       | Error ->
           Error
       | Correct conditional_directives -> (
-        match compile_body symbol_table stack_index consequent with
+        match
+          compile_body definitions symbol_table stack_index consequent
+        with
         | Error ->
             Error
         | Correct consequent_directives -> (
-          match compile_body symbol_table stack_index alternative with
+          match
+            compile_body definitions symbol_table stack_index
+              alternative
+          with
           | Error ->
               Error
           | Correct alternative_directives ->
@@ -113,11 +121,13 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
                 @ [Label else_label] @ alternative_directives
                 @ [Label continue_label] ) ) ) )
   | Add (arg1, arg2) -> (
-    match compile_body symbol_table stack_index arg1 with
+    match compile_body definitions symbol_table stack_index arg1 with
     | Error ->
         Error
     | Correct arg1_directives -> (
-      match compile_body symbol_table (stack_index - 8) arg2 with
+      match
+        compile_body definitions symbol_table (stack_index - 8) arg2
+      with
       | Error ->
           Error
       | Correct arg2_directives ->
@@ -129,11 +139,13 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
             @ [Mov (RegMem (R8, arg1_memory_address))]
             @ [Add (RegReg (Rax, R8))] ) ) )
   | Sub (arg1, arg2) -> (
-    match compile_body symbol_table stack_index arg1 with
+    match compile_body definitions symbol_table stack_index arg1 with
     | Error ->
         Error
     | Correct arg1_directives -> (
-      match compile_body symbol_table (stack_index - 8) arg2 with
+      match
+        compile_body definitions symbol_table (stack_index - 8) arg2
+      with
       | Error ->
           Error
       | Correct arg2_directives ->
@@ -145,11 +157,13 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
             @ [Mov (RegMem (R8, arg1_memory_address))]
             @ [Sub (RegReg (Rax, R8))] ) ) )
   | Eq (arg1, arg2) -> (
-    match compile_body symbol_table stack_index arg1 with
+    match compile_body definitions symbol_table stack_index arg1 with
     | Error ->
         Error
     | Correct arg1_directives -> (
-      match compile_body symbol_table (stack_index - 8) arg2 with
+      match
+        compile_body definitions symbol_table (stack_index - 8) arg2
+      with
       | Error ->
           Error
       | Correct arg2_directives ->
@@ -162,11 +176,13 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
             @ [Cmp (RegReg (Rax, R8))]
             @ zf_to_bool ) ) )
   | Lt (arg1, arg2) -> (
-    match compile_body symbol_table stack_index arg1 with
+    match compile_body definitions symbol_table stack_index arg1 with
     | Error ->
         Error
     | Correct arg1_directives -> (
-      match compile_body symbol_table (stack_index - 8) arg2 with
+      match
+        compile_body definitions symbol_table (stack_index - 8) arg2
+      with
       | Error ->
           Error
       | Correct arg2_directives ->
@@ -179,12 +195,12 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
             @ [Cmp (RegReg (R8, Rax))]
             @ lf_to_bool ) ) )
   | Let {name; value; body} -> (
-    match compile_body symbol_table stack_index value with
+    match compile_body definitions symbol_table stack_index value with
     | Error ->
         Error
     | Correct value_directives -> (
       match
-        compile_body
+        compile_body definitions
           (Symtab.add name stack_index symbol_table)
           (stack_index - 8) body
       with
@@ -202,11 +218,13 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
     | Some location ->
         Correct [Mov (RegMem (Rax, stack_address location))] )
   | Pair (left, right) -> (
-    match compile_body symbol_table stack_index left with
+    match compile_body definitions symbol_table stack_index left with
     | Error ->
         Error
     | Correct left_directives -> (
-      match compile_body symbol_table (stack_index - 8) right with
+      match
+        compile_body definitions symbol_table (stack_index - 8) right
+      with
       | Error ->
           Error
       | Correct right_directives ->
@@ -222,7 +240,7 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
               ; Or (RegImm (Rax, pair_spec.tag))
               ; Add (RegImm (Rdi, 16)) ] ) ) )
   | Left arg -> (
-    match compile_body symbol_table stack_index arg with
+    match compile_body definitions symbol_table stack_index arg with
     | Error ->
         Error
     | Correct arg_directives ->
@@ -230,7 +248,7 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
           ( arg_directives
           @ [Mov (RegMem (Rax, RegImm (Rax, -pair_spec.tag)))] ) )
   | Right arg -> (
-    match compile_body symbol_table stack_index arg with
+    match compile_body definitions symbol_table stack_index arg with
     | Error ->
         Error
     | Correct arg_directives ->
@@ -253,7 +271,7 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
         ; Mov (RegMem (Rdi, stack_address stack_index))
         ; Mov (RegImm (Rax, encode_bool true)) ]
   | Print arg -> (
-    match compile_body symbol_table stack_index arg with
+    match compile_body definitions symbol_table stack_index arg with
     | Error ->
         Error
     | Correct arg_directives ->
@@ -273,40 +291,128 @@ let rec compile_body (symbol_table : int Symtab.t) (stack_index : int)
           | Error ->
               Error
           | Correct directives -> (
-            match compile_body symbol_table stack_index arg with
+            match
+              compile_body definitions symbol_table stack_index arg
+            with
             | Error ->
                 Error
             | Correct arg_directives ->
                 Correct (directives @ arg_directives) ) )
         (Correct [Mov (RegImm (Rax, encode_bool true))])
         args
+  | Call {function_name; arguments} -> (
+    match Symtab.find_opt function_name definitions with
+    | None ->
+        Error
+    | Some definition -> (
+        if List.length definition.args <> List.length arguments then
+          Error
+        else
+          let stack_base = align_stack_index (stack_index + 8) in
+          let _, compiled_args =
+            List.fold_left
+              (fun (i, result) argument ->
+                match result with
+                | Error ->
+                    (i, Error)
+                | Correct directives -> (
+                  match
+                    compile_body definitions symbol_table
+                      (stack_base - (8 * (i + 2)))
+                      argument
+                  with
+                  | Error ->
+                      (i, Error)
+                  | Correct new_directives ->
+                      ( i + 1
+                      , Correct
+                          ( directives @ new_directives
+                          @ [ Mov
+                                (MemReg
+                                   ( stack_address
+                                       (stack_base - (8 * (i + 2)))
+                                   , Rax ) ) ] ) ) ) )
+              (0, Correct []) arguments
+          in
+          match compiled_args with
+          | Error ->
+              Error
+          | Correct arg_directives ->
+              Correct
+                ( arg_directives
+                @ [ Add (RegImm (Rsp, stack_base))
+                  ; Call function_name
+                  ; Sub (RegImm (Rsp, stack_base)) ] ) ) )
 
-let compile (expression : lisp_expression) : directive list =
-  let symbol_table = Symtab.empty in
-  match compile_body symbol_table (-8) expression with
+let compile_definitions (definitions : definition Symtab.t) :
+    compile_result =
+  Symtab.fold
+    (fun name definition result ->
+      match result with
+      | Error ->
+          Error
+      | Correct directives -> (
+          let arg_addresses =
+            List.mapi
+              (fun i arg -> (arg, -8 * (i + 1)))
+              definition.args
+          in
+          let function_call_env =
+            List.fold_left
+              (fun result (name, value) ->
+                Symtab.add name value result )
+              Symtab.empty arg_addresses
+          in
+          match
+            compile_body definitions function_call_env
+              (-8 * (List.length definition.args + 1))
+              definition.body
+          with
+          | Error ->
+              Error
+          | Correct new_directives ->
+              Correct
+                (directives @ [Label name] @ new_directives @ [Ret]) )
+      )
+    definitions (Correct [])
+
+let compile (program : program) : compile_result =
+  match compile_definitions program.definitions with
+  | Error ->
+      Error
+  | Correct definitions -> (
+    match
+      compile_body program.definitions Symtab.empty (-8) program.body
+    with
+    | Error ->
+        Error
+    | Correct body ->
+        Correct
+          ( [ Global "entry"
+            ; Extern error_function_name
+            ; Extern read_num_function_name
+            ; Extern print_newline_function_name
+            ; Extern print_function_name
+            ; Label "entry" ]
+          @ body @ [Ret] @ definitions ) )
+
+let run (program : program) : string =
+  match compile program with
   | Error ->
       failwith ""
-  | Correct body ->
-      [ Global "entry"
-      ; Extern error_function_name
-      ; Extern read_num_function_name
-      ; Extern print_newline_function_name
-      ; Extern print_function_name
-      ; Label "entry" ]
-      @ body @ [Ret]
-
-let run (expression : lisp_expression) : string =
-  let assembly =
-    expression |> compile
-    |> List.map directive_to_string
-    |> String.concat "\n"
-  in
-  let file = open_out "program.s" in
-  output_string file assembly ;
-  close_out file ;
-  ignore (Unix.system "nasm program.s -f elf64 -o program.o") ;
-  ignore
-    (Unix.system "gcc program.o runtime.o -o program -z noexecstack") ;
-  let inp = Unix.open_process_in "./program" in
-  let r = input_line inp in
-  close_in inp ; r
+  | Correct directives ->
+      let assembly =
+        directives
+        |> List.map directive_to_string
+        |> String.concat "\n"
+      in
+      let file = open_out "program.s" in
+      output_string file assembly ;
+      close_out file ;
+      ignore (Unix.system "nasm program.s -f elf64 -o program.o") ;
+      ignore
+        (Unix.system
+           "gcc program.o runtime.o -o program -z noexecstack" ) ;
+      let inp = Unix.open_process_in "./program" in
+      let r = input_line inp in
+      close_in inp ; r
