@@ -213,15 +213,25 @@ let rec interpret_internal (definitions : definition Symtab.t)
     | Correct arg_value ->
         output_string stdout (value_to_string arg_value) ;
         Correct Unit )
-  | Do args ->
+  | Do {first; last} -> (
+    let first_success = (
       List.fold_left
-        (fun result arg ->
-          match result with
-          | Error ->
-              Error
-          | Correct _ ->
-              interpret_internal definitions env arg )
-        (Correct Unit) args
+        (
+          fun success expr -> (
+            if not success then false
+            else (
+              match interpret_internal definitions env expr with
+              | Error -> false
+              | Correct _ -> true
+            )
+          )
+        )
+        true
+        first
+    ) in
+    if not first_success then Error
+    else interpret_internal definitions env last
+  )
   | Call {function_name; arguments} -> (
     match Symtab.find_opt function_name definitions with
     | None ->
