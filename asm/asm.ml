@@ -2,16 +2,11 @@ type register = Rax | Rcx | R8 | Rsp | Rdi
 
 let register_to_string (reg : register) : string =
   match reg with
-  | Rax ->
-      "rax"
-  | Rcx ->
-      "rcx"
-  | R8 ->
-      "r8"
-  | Rsp ->
-      "rsp"
-  | Rdi ->
-      "rdi"
+  | Rax -> "rax"
+  | Rcx -> "rcx"
+  | R8 -> "r8"
+  | Rsp -> "rsp"
+  | Rdi -> "rdi"
 
 type memory_address =
   | Reg of register
@@ -53,6 +48,16 @@ let dest_src_to_string (dest_src : dest_src) : string * string =
   | MemImm (mem, imm) ->
       (memory_to_string mem, string_of_int imm)
 
+type destination =
+| Register of register
+| Memory of memory_address
+
+let destination_to_string (dest: destination) : string = (
+  match dest with
+  | Register r -> register_to_string r
+  | Memory m -> memory_to_string m
+)
+
 type directive =
   | Global of string
   | Extern of string
@@ -69,13 +74,14 @@ type directive =
   | Setz of register
   | Setl of register
   | Jmp of string
-  | ComputedJmp of int
+  | ComputedJmp of register
   | Jz of string
   | Jnz of string
   | Call of string
   | ComputedCall of int
   | Ret
   | Comment of string
+  | LeaLabel of {destination: destination; label: string}
 
 let run cmd args =
   let open Shexp_process in
@@ -130,8 +136,8 @@ let directive_to_string = function
       Printf.sprintf "\tsetl %s" (register_to_string reg)
   | Jmp name ->
       Printf.sprintf "\tjmp %s" (label_name macos name)
-  | ComputedJmp _ ->
-      "todo"
+  | ComputedJmp reg ->
+      Printf.sprintf "\tjmp %s" (register_to_string reg)
   | Jz name ->
       Printf.sprintf "\tjz %s" (label_name macos name)
   | Jnz name ->
@@ -144,3 +150,5 @@ let directive_to_string = function
       "\tret"
   | Comment s ->
       Printf.sprintf "; %s" s
+  | LeaLabel {destination; label} ->
+    Printf.sprintf "\tlea %s, [%s]" (destination_to_string destination) label

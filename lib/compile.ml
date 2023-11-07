@@ -22,15 +22,24 @@ let read_num_function_name : string = "read_num"
 let print_function_name : string = "print_value"
 let print_newline_function_name : string = "print_newline"
 
-let assert_type (target : register) (temporary : register) (spec : datatype_spec) : directive list = [
+let assert_type (target : register) (temporary : register) (mask: int) (tag: int) : directive list = [
   Mov (RegReg (temporary, target));
-  And (RegImm (temporary, get_mask spec));
-  Cmp (RegImm (temporary, spec.tag));
+  And (RegImm (temporary, mask));
+  Cmp (RegImm (temporary, tag));
   Jnz error_function_name
 ]
 
+let assert_value_type (target : register) (temporary : register) (spec : value_type_spec) : directive list =
+  assert_type target temporary (get_mask spec) spec.tag
+
 let assert_is_number (target : register) (temporary : register) : directive list =
-  assert_type target temporary num_spec
+  assert_value_type target temporary num_spec
+
+let assert_reference_type (target : register) (temporary : register) (spec : reference_type_spec) : directive list =
+  assert_type target temporary reference_type_mask spec.tag
+
+let assert_is_function (target : register) (temporary : register) : directive list =
+  assert_reference_type target temporary function_spec
 
 let align_stack_index (stack_index : int) : int =
   if stack_index mod 16 = -8 then stack_index else stack_index - 8
@@ -125,7 +134,8 @@ let rec compile_non_tail (definitions : definition Symtab.t) (symbol_table : int
     (Correct [])
     (first @ [last])
   )
-  | Call {function_name; arguments} -> (
+  | Call {function_; arguments} -> failwith todo
+    (* (
     match Symtab.find_opt function_name definitions with
     | None -> Error
     | Some definition -> (
@@ -167,7 +177,7 @@ let rec compile_non_tail (definitions : definition Symtab.t) (symbol_table : int
         )
       )
     )
-  )
+  ) *)
   | Left arg -> compile_left definitions symbol_table stack_index arg
   | Right arg -> compile_right definitions symbol_table stack_index arg
   | Read_num -> Correct
@@ -447,9 +457,16 @@ let rec compile_tail (definitions : definition Symtab.t) (symbol_table : int Sym
     )
   )
   | Var name -> (
-    match compile_var symbol_table name with
-    | Error -> Error
-    | Correct directives -> Correct (directives @ [Ret])
+    match Symtab.find_opt name definitions with
+    | Some _ -> Correct [
+      LeaLabel {destination = Register Rax; label = name};
+      Or (RegImm (Rax, function_spec.tag));
+    ]
+    | None -> (
+      match compile_var symbol_table name with
+      | Error -> Error
+      | Correct directives -> Correct (directives @ [Ret])
+    )
   )
   | Pair (left, right) -> (
     match compile_pair definitions symbol_table stack_index left right with
@@ -498,8 +515,12 @@ let rec compile_tail (definitions : definition Symtab.t) (symbol_table : int Sym
         | Correct compiled_last -> Correct (compiled_first @ compiled_last)
       )
   )
-  | Call {function_name; arguments} -> (
-    match Symtab.find_opt function_name definitions with
+  | Call {function_; arguments} -> failwith todo
+    (* (
+    match compile_non_tail definitions symbol_table stack_index function_ with
+    | Error -> Error
+    | Correct function_directives -> (
+      match Symtab.find_opt function_name definitions with
     | None -> Error
     | Some definition -> (
       if List.length definition.args <> List.length arguments then Error
@@ -542,7 +563,9 @@ let rec compile_tail (definitions : definition Symtab.t) (symbol_table : int Sym
         )
       )
     )
-  )
+    )
+    
+  ) *)
 )
 
 let compile_definitions (definitions : definition Symtab.t) : compile_result = (
@@ -592,7 +615,7 @@ let compile (program : program) : compile_result = (
 
 let run (program : program) : string = (
   match compile program with
-  | Error -> failwith ""
+  | Error -> failwith todo
   | Correct directives ->
       let assembly =
         directives

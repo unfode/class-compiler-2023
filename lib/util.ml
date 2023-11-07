@@ -21,3 +21,5 @@ let rec get_first_last (lst: 'a list) : 'a list * 'a = (
     (x :: first, last)
   )
 )
+
+let todo : string = "todo"

@@ -27,7 +27,7 @@ type lisp_expression =
   | Print of lisp_expression
   | New_line
   | Do of {first: lisp_expression list; last: lisp_expression}
-  | Call of {function_name: string; arguments: lisp_expression list}
+  | Call of {function_: lisp_expression; arguments: lisp_expression list}
 
 type definition = {args: string list; body: lisp_expression}
 
@@ -160,7 +160,10 @@ let rec s_exp_to_lisp_expression (s_expression : s_exp) :
       )
     )
   )
-  | Lst (Sym f :: args) -> (
+  | Lst (f :: args) -> (
+    match s_exp_to_lisp_expression f with
+    | None -> None
+    | Some f -> (
       let args = (
         List.fold_left
           (
@@ -179,7 +182,8 @@ let rec s_exp_to_lisp_expression (s_expression : s_exp) :
       ) in
       match args with
       | None -> None
-      | Some arg_exprs -> Some (Call {function_name= f; arguments= arg_exprs})
+      | Some arg_exprs -> Some (Call {function_= f; arguments= arg_exprs})
+    )
   )
   | _ ->
       None
