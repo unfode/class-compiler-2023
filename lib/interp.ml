@@ -2,11 +2,11 @@ open Lisp_expression
 open Util
 
 type value =
-  | Number of int
-  | Boolean of bool
-  | Pair of value * value
-  | Unit
-  | Function of string
+| Number of int
+| Boolean of bool
+| Pair of value * value
+| Unit
+| Function of string
 
 let rec value_to_string (v : value) : string =
   match v with

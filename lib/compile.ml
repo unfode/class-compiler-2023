@@ -30,13 +30,13 @@ let assert_type (target : register) (temporary : register) (mask: int) (tag: int
 ]
 
 let assert_value_type (target : register) (temporary : register) (spec : value_type_spec) : directive list =
-  assert_type target temporary (get_mask spec) spec.tag
+  assert_type target temporary (get_mask ~shift:spec.shift) spec.tag
 
 let assert_is_number (target : register) (temporary : register) : directive list =
   assert_value_type target temporary num_spec
 
 let assert_reference_type (target : register) (temporary : register) (spec : reference_type_spec) : directive list =
-  assert_type target temporary reference_type_mask spec.tag
+  assert_type target temporary (get_mask ~shift:reference_type_shift) spec.tag
 
 let assert_is_function (target : register) (temporary : register) : directive list =
   assert_reference_type target temporary function_spec
@@ -213,7 +213,7 @@ and compile_is_num (definitions : definition Symtab.t) (symbol_table : int Symta
     | Error -> Error
     | Correct arg_directives -> Correct (
       arg_directives @
-      [And (RegImm (Rax, get_mask num_spec)); Cmp (RegImm (Rax, num_spec.tag))] @
+      [And (RegImm (Rax, get_mask ~shift:num_spec.shift)); Cmp (RegImm (Rax, num_spec.tag))] @
       zf_to_bool
     )
 )
