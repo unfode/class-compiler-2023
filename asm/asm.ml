@@ -1,52 +1,46 @@
 type register = Rax | Rcx | R8 | Rsp | Rdi
 
-let register_to_string (reg : register) : string =
+let register_to_string (reg : register) : string = (
   match reg with
   | Rax -> "rax"
   | Rcx -> "rcx"
   | R8 -> "r8"
   | Rsp -> "rsp"
   | Rdi -> "rdi"
+)
 
 type memory_address =
-  | Reg of register
-  | Imm of int
-  | RegImm of register * int
+| Reg of register
+| Imm of int
+| RegImm of register * int
 
-let memory_to_string (mem : memory_address) : string =
+let memory_to_string (mem : memory_address) : string = (
   let body =
     match mem with
-    | Reg reg ->
-        register_to_string reg
-    | Imm i ->
-        string_of_int i
-    | RegImm (reg, i) ->
-        register_to_string reg ^ " + " ^ string_of_int i
+    | Reg reg -> register_to_string reg
+    | Imm i -> string_of_int i
+    | RegImm (reg, i) -> register_to_string reg ^ " + " ^ string_of_int i
   in
   "[" ^ body ^ "]"
+)
 
-let stack_address (stack_index : int) : memory_address =
-  RegImm (Rsp, stack_index)
+let stack_address (stack_index : int) : memory_address = RegImm (Rsp, stack_index)
 
 type dest_src =
-  | RegImm of register * int
-  | RegReg of register * register
-  | RegMem of register * memory_address
-  | MemReg of memory_address * register
-  | MemImm of memory_address * int
+| RegImm of register * int
+| RegReg of register * register
+| RegMem of register * memory_address
+| MemReg of memory_address * register
+| MemImm of memory_address * int
 
-let dest_src_to_string (dest_src : dest_src) : string * string =
+let dest_src_to_string (dest_src : dest_src) : string * string = (
   match dest_src with
-  | RegImm (reg, imm) ->
-      (register_to_string reg, string_of_int imm)
-  | RegReg (dest, src) ->
-      (register_to_string dest, register_to_string src)
-  | RegMem (reg, mem) ->
-      (register_to_string reg, memory_to_string mem)
-  | MemReg (mem, reg) ->
-      (memory_to_string mem, register_to_string reg)
-  | MemImm (mem, imm) ->
-      (memory_to_string mem, string_of_int imm)
+  | RegImm (reg, imm) -> (register_to_string reg, string_of_int imm)
+  | RegReg (dest, src) -> (register_to_string dest, register_to_string src)
+  | RegMem (reg, mem) -> (register_to_string reg, memory_to_string mem)
+  | MemReg (mem, reg) -> (memory_to_string mem, register_to_string reg)
+  | MemImm (mem, imm) -> (memory_to_string mem, string_of_int imm)
+)
 
 type destination =
 | Register of register

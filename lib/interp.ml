@@ -8,17 +8,22 @@ type value =
 | Unit
 | Function of string
 
-let rec value_to_string (v : value) : string =
+let rec value_to_string (v : value) : string = (
   match v with
   | Number n -> string_of_int n
   | Boolean b -> if b then "true" else "false"
-  | Pair (left, right) ->
-    Printf.sprintf "(pair %s %s)" (value_to_string left)
-      (value_to_string right)
+  | Pair (left, right) -> Printf.sprintf "(pair %s %s)" (value_to_string left) (value_to_string right)
   | Unit -> "()"
   | Function _ -> "<function>"
+)
 
 type interpret_result = Correct of value | Error
+let bind (result: interpret_result) (f: value -> interpret_result) : interpret_result = (
+  match result with
+  | Error -> Error
+  | Correct value -> f value
+)
+let (>>=) = bind
 
 let interpret_result_to_string (result : interpret_result) : string =
   match result with
@@ -28,131 +33,160 @@ let interpret_result_to_string (result : interpret_result) : string =
       value_to_string value
 
 let rec interpret_internal (definitions : definition Symtab.t)
-    (env : value Symtab.t) (expression : lisp_expression) :
-    interpret_result =
+    (env : value Symtab.t) (expression : lisp_expression) : interpret_result = (
   match expression with
-  | Number n ->
-      Correct (Number n)
-  | Boolean b ->
-      Correct (Boolean b)
+  | Number n -> Correct (Number n)
+  | Boolean b -> Correct (Boolean b)
   | Not arg -> (
-    match interpret_internal definitions env arg with
-    | Error ->
-        Error
+    (* match interpret_internal definitions env arg with
+    | Error -> Error
     | Correct arg_value ->
         if arg_value = Boolean false then Correct (Boolean true)
-        else Correct (Boolean false) )
+        else Correct (Boolean false) *)
+    let arg_result = interpret_internal definitions env arg in
+    bind arg_result (
+      fun value -> (
+        if value = Boolean false then Correct (Boolean true)
+        else Correct (Boolean false)
+      )
+    )
+  )
   | Is_zero arg -> (
-    match interpret_internal definitions env arg with
-    | Error ->
-        Error
+    (* match interpret_internal definitions env arg with
+    | Error -> Error
     | Correct arg_value ->
         if arg_value = Number 0 then Correct (Boolean true)
-        else Correct (Boolean false) )
+        else Correct (Boolean false) *)
+    interpret_internal definitions env arg >>= (fun value -> (
+      if value = Number 0 then Correct (Boolean true)
+      else Correct (Boolean false)
+    ))
+  )
   | Is_num arg -> (
-    match interpret_internal definitions env arg with
-    | Error ->
-        Error
+    (* match interpret_internal definitions env arg with
+    | Error -> Error
     | Correct arg_value -> (
       match arg_value with
-      | Number _ ->
-          Correct (Boolean true)
-      | Boolean _ | Pair _ | Unit | Function _ ->
-          Correct (Boolean false) ) )
+      | Number _ -> Correct (Boolean true)
+      | Boolean _ | Pair _ | Unit | Function _ -> Correct (Boolean false)
+    ) *)
+    interpret_internal definitions env arg >>= (fun value -> (
+      match value with
+      | Number _ -> Correct (Boolean true)
+      | Boolean _ | Pair _ | Unit | Function _ -> Correct (Boolean false)
+    ))
+  )
   | Add1 arg -> (
     match interpret_internal definitions env arg with
-    | Error ->
-        Error
+    | Error -> Error
     | Correct arg_value -> (
       match arg_value with
-      | Number n ->
-          Correct (Number (n + 1))
-      | Boolean _ | Pair _ | Unit | Function _ ->
-          Error ) )
+      | Number n -> Correct (Number (n + 1))
+      | Boolean _ | Pair _ | Unit | Function _ -> Error
+    )
+  )
   | Sub1 arg -> (
     match interpret_internal definitions env arg with
-    | Error ->
-        Error
+    | Error -> Error
     | Correct arg_value -> (
       match arg_value with
-      | Number n ->
-          Correct (Number (n - 1))
-      | Boolean _ | Pair _ | Unit | Function _ ->
-          Error ) )
+      | Number n -> Correct (Number (n - 1))
+      | Boolean _ | Pair _ | Unit | Function _ -> Error
+    )
+  )
   | If {conditional; consequent; alternative} -> (
     match interpret_internal definitions env conditional with
-    | Error ->
-        Error
+    | Error -> Error
     | Correct conditional_value -> (
       match conditional_value with
-      | Boolean false ->
-          interpret_internal definitions env alternative
-      | Boolean true | Number _ | Pair _ | Unit | Function _ ->
-          interpret_internal definitions env consequent ) )
+      | Boolean false -> interpret_internal definitions env alternative
+      | Boolean true | Number _ | Pair _ | Unit | Function _ -> interpret_internal definitions env consequent
+    )
+  )
   | Add (operand1, operand2) -> (
-    match interpret_internal definitions env operand1 with
-    | Error ->
-        Error
+    (* match interpret_internal definitions env operand1 with
+    | Error -> Error
     | Correct operand1_value -> (
       match operand1_value with
-      | Boolean _ | Pair _ | Unit | Function _ ->
-          Error
+      | Boolean _ | Pair _ | Unit | Function _ -> Error
       | Number n1 -> (
         match interpret_internal definitions env operand2 with
-        | Error ->
-            Error
+        | Error -> Error
         | Correct operand2_value -> (
           match operand2_value with
-          | Boolean _ | Pair _ | Unit | Function _ ->
-              Error
-          | Number n2 ->
-              Correct (Number (n1 + n2)) ) ) ) )
+          | Boolean _ | Pair _ | Unit | Function _ -> Error
+          | Number n2 -> Correct (Number (n1 + n2))
+        )
+      )
+    ) *)
+    let operand1_result = interpret_internal definitions env operand1 in
+    bind operand1_result (fun value1 -> (
+      match value1 with
+      | Boolean _ | Pair _ | Unit | Function _ -> Error
+      | Number n1 -> (
+        let operand2_result = interpret_internal definitions env operand2 in
+        bind operand2_result (fun value2 -> (
+          match value2 with
+          | Boolean _ | Pair _ | Unit | Function _ -> Error
+          | Number n2 -> Correct (Number (n1 + n2))
+        ))
+      )
+    ))
+  )
   | Sub (operand1, operand2) -> (
-    match interpret_internal definitions env operand1 with
-    | Error ->
-        Error
+    (* match interpret_internal definitions env operand1 with
+    | Error -> Error
     | Correct operand1_value -> (
       match operand1_value with
-      | Boolean _ | Pair _ | Unit | Function _ ->
-          Error
+      | Boolean _ | Pair _ | Unit | Function _ -> Error
       | Number n1 -> (
         match interpret_internal definitions env operand2 with
-        | Error ->
-            Error
+        | Error -> Error
         | Correct operand2_value -> (
           match operand2_value with
-          | Boolean _ | Pair _ | Unit | Function _ ->
-              Error
-          | Number n2 ->
-              Correct (Number (n1 - n2)) ) ) ) )
+          | Boolean _ | Pair _ | Unit | Function _ -> Error
+          | Number n2 -> Correct (Number (n1 - n2))
+        )
+      )
+    ) *)
+    interpret_internal definitions env operand1 >>= (fun value1 -> (
+      match value1 with
+      | Boolean _ | Pair _ | Unit | Function _ -> Error
+      | Number n1 -> (
+        interpret_internal definitions env operand2 >>= (fun value2 -> (
+          match value2 with
+          | Boolean _ | Pair _ | Unit | Function _ -> Error
+          | Number n2 -> Correct (Number (n1 - n2))
+        ))
+      )
+    ))
+  )
   | Eq (operand1, operand2) -> (
     match interpret_internal definitions env operand1 with
-    | Error ->
-        Error
+    | Error -> Error
     | Correct operand1_value -> (
       match interpret_internal definitions env operand2 with
-      | Error ->
-          Error
-      | Correct operand2_value ->
-          Correct (Boolean (operand1_value = operand2_value)) ) )
+      | Error -> Error
+      | Correct operand2_value -> Correct (Boolean (operand1_value = operand2_value))
+    )
+  )
   | Lt (operand1, operand2) -> (
     match interpret_internal definitions env operand1 with
-    | Error ->
-        Error
+    | Error -> Error
     | Correct operand1_value -> (
       match operand1_value with
-      | Boolean _ | Pair _ | Unit | Function _ ->
-          Error
+      | Boolean _ | Pair _ | Unit | Function _ -> Error
       | Number n1 -> (
         match interpret_internal definitions env operand2 with
-        | Error ->
-            Error
+        | Error -> Error
         | Correct operand2_value -> (
           match operand2_value with
-          | Boolean _ | Pair _ | Unit | Function _ ->
-              Error
-          | Number n2 ->
-              Correct (Boolean (n1 < n2)) ) ) ) )
+          | Boolean _ | Pair _ | Unit | Function _ -> Error
+          | Number n2 -> Correct (Boolean (n1 < n2))
+        )
+      )
+    )
+  )
   | Var name -> (
     match Symtab.find_opt name definitions with
     | Some _ -> Correct (Function name)
@@ -164,57 +198,56 @@ let rec interpret_internal (definitions : definition Symtab.t)
   )
   | Let {name; value; body} -> (
     match interpret_internal definitions env value with
-    | Error ->
-        Error
-    | Correct value ->
-        let new_env = Symtab.add name value env in
-        interpret_internal definitions new_env body )
+    | Error -> Error
+    | Correct value -> (
+      let new_env = Symtab.add name value env in
+      interpret_internal definitions new_env body
+    )
+  )
   | Pair (left, right) -> (
     match interpret_internal definitions env left with
-    | Error ->
-        Error
+    | Error -> Error
     | Correct left_value -> (
       match interpret_internal definitions env right with
-      | Error ->
-          Error
-      | Correct right_value ->
-          Correct (Pair (left_value, right_value)) ) )
+      | Error -> Error
+      | Correct right_value -> Correct (Pair (left_value, right_value))
+    )
+  )
   | Left arg -> (
     match interpret_internal definitions env arg with
-    | Error ->
-        Error
+    | Error -> Error
     | Correct arg_value -> (
       match arg_value with
-      | Number _ | Boolean _ | Unit | Function _ ->
-          Error
-      | Pair (left, _) ->
-          Correct left ) )
+      | Number _ | Boolean _ | Unit | Function _ -> Error
+      | Pair (left, _) -> Correct left
+    )
+  )
   | Right arg -> (
     match interpret_internal definitions env arg with
-    | Error ->
-        Error
+    | Error -> Error
     | Correct arg_value -> (
       match arg_value with
-      | Number _ | Boolean _ | Unit | Function _ ->
-          Error
-      | Pair (_, right) ->
-          Correct right ) )
+      | Number _ | Boolean _ | Unit | Function _ -> Error
+      | Pair (_, right) -> Correct right
+    )
+  )
   | Read_num -> (
     match input_line stdin |> int_of_string_opt with
-    | None ->
-        Error
-    | Some n ->
-        Correct (Number n) )
-  | New_line ->
-      output_string stdout "\n" ;
-      Correct Unit
+    | None -> Error
+    | Some n -> Correct (Number n)
+  )
+  | New_line -> (
+    output_string stdout "\n" ;
+    Correct Unit
+  )
   | Print arg -> (
     match interpret_internal definitions env arg with
-    | Error ->
-        Error
-    | Correct arg_value ->
-        output_string stdout (value_to_string arg_value) ;
-        Correct Unit )
+    | Error -> Error
+    | Correct arg_value -> (
+      output_string stdout (value_to_string arg_value) ;
+      Correct Unit
+    )
+  )
   | Do {first; last} -> (
     let first_success = (
       List.fold_left
@@ -278,6 +311,7 @@ let rec interpret_internal (definitions : definition Symtab.t)
       )
     )
   )
+)
 
 let interpret (program : program) : interpret_result =
   interpret_internal program.definitions Symtab.empty program.body

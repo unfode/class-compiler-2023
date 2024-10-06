@@ -31,8 +31,10 @@ type lisp_expression =
 
 type definition = {args: string list; body: lisp_expression}
 
-type program =
-  {definitions: definition Symtab.t; body: lisp_expression}
+type program = {
+  definitions: definition Symtab.t;
+  body: lisp_expression
+}
 
 let rec s_exp_to_lisp_expression (s_expression : s_exp) :
     lisp_expression option =

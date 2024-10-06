@@ -106,7 +106,10 @@ let rec compile_non_tail (definitions : definition Symtab.t) (symbol_table : int
           | Error -> Error
           | Correct alternative_directives -> Correct (
             conditional_directives @
-            [Cmp (RegImm (Rax, encode_bool false)); Jz else_label] @
+            [
+              Cmp (RegImm (Rax, encode_bool false));
+              Jz else_label
+            ] @
             consequent_directives @
             [Jmp continue_label] @
             [Label else_label] @
@@ -131,8 +134,8 @@ let rec compile_non_tail (definitions : definition Symtab.t) (symbol_table : int
           )
         )
       )
-    (Correct [])
-    (first @ [last])
+      (Correct [])
+      (first @ [last])
   )
   | Call {function_; arguments} -> failwith todo
     (* (
@@ -194,28 +197,27 @@ let rec compile_non_tail (definitions : definition Symtab.t) (symbol_table : int
 and compile_not (definitions : definition Symtab.t) (symbol_table : int Symtab.t)
 (stack_index : int) (arg : lisp_expression) : compile_result = (
   match compile_non_tail definitions symbol_table stack_index arg with
-    | Error -> Error
-    | Correct arg_directives -> Correct (arg_directives @ [Cmp (RegImm (Rax, encode_bool false))] @ zf_to_bool)
+  | Error -> Error
+  | Correct arg_directives -> Correct (arg_directives @ [Cmp (RegImm (Rax, encode_bool false))] @ zf_to_bool)
 )
 and compile_is_zero (definitions : definition Symtab.t) (symbol_table : int Symtab.t)
 (stack_index : int) (arg : lisp_expression) : compile_result = (
   match compile_non_tail definitions symbol_table stack_index arg with
-  | Error ->Error
-  | Correct arg_directives -> Correct (
-    arg_directives @
-    [Cmp (RegImm (Rax, encode_int 0))] @
-    zf_to_bool
-  )
+  | Error -> Error
+  | Correct arg_directives -> Correct (arg_directives @ [Cmp (RegImm (Rax, encode_int 0))] @ zf_to_bool)
 )
 and compile_is_num (definitions : definition Symtab.t) (symbol_table : int Symtab.t)
 (stack_index : int) (arg : lisp_expression) : compile_result = (
   match compile_non_tail definitions symbol_table stack_index arg with
-    | Error -> Error
-    | Correct arg_directives -> Correct (
-      arg_directives @
-      [And (RegImm (Rax, get_mask ~shift:num_spec.shift)); Cmp (RegImm (Rax, num_spec.tag))] @
-      zf_to_bool
-    )
+  | Error -> Error
+  | Correct arg_directives -> Correct (
+    arg_directives @
+    [
+      And (RegImm (Rax, get_mask ~shift:num_spec.shift));
+      Cmp (RegImm (Rax, num_spec.tag))
+    ] @
+    zf_to_bool
+  )
 )
 and compile_add1 (definitions : definition Symtab.t) (symbol_table : int Symtab.t)
 (stack_index : int) (arg : lisp_expression) : compile_result = (
@@ -252,8 +254,11 @@ and compile_add (definitions : definition Symtab.t) (symbol_table : int Symtab.t
         [Mov (MemReg (arg1_memory_address, Rax))] @
         arg2_directives @
         assert_is_number Rax R8 @
-        [Mov (RegMem (R8, arg1_memory_address)); Add (RegReg (Rax, R8))]
-      ) 
+        [
+          Mov (RegMem (R8, arg1_memory_address));
+          Add (RegReg (Rax, R8))
+        ]
+      )
   )
 )
 and compile_sub (definitions : definition Symtab.t) (symbol_table : int Symtab.t)
@@ -271,7 +276,10 @@ and compile_sub (definitions : definition Symtab.t) (symbol_table : int Symtab.t
             [Mov (MemReg (arg1_memory_address, Rax))] @
             arg2_directives @
             assert_is_number Rax R8 @
-            [Mov (RegMem (R8, arg1_memory_address)); Sub (RegReg (Rax, R8))]
+            [
+              Mov (RegMem (R8, arg1_memory_address));
+              Sub (RegReg (Rax, R8))
+            ]
           )
     )
 )
@@ -288,7 +296,10 @@ and compile_eq (definitions : definition Symtab.t) (symbol_table : int Symtab.t)
           arg1_directives @
           [Mov (MemReg (arg1_memory_address, Rax))] @
           arg2_directives @
-          [Mov (RegMem (R8, arg1_memory_address)); Cmp (RegReg (Rax, R8))] @
+          [
+            Mov (RegMem (R8, arg1_memory_address));
+            Cmp (RegReg (Rax, R8))
+          ] @
           zf_to_bool
         )
     )
@@ -308,7 +319,10 @@ and compile_lt (definitions : definition Symtab.t) (symbol_table : int Symtab.t)
         [Mov (MemReg (arg1_memory_address, Rax))] @
         arg2_directives @
         assert_is_number Rax R8 @
-        [Mov (RegMem (R8, arg1_memory_address)); Cmp (RegReg (R8, Rax))] @
+        [
+          Mov (RegMem (R8, arg1_memory_address));
+          Cmp (RegReg (R8, Rax))
+        ] @
         lf_to_bool
       )
   )
@@ -316,26 +330,27 @@ and compile_lt (definitions : definition Symtab.t) (symbol_table : int Symtab.t)
 and compile_pair (definitions : definition Symtab.t) (symbol_table : int Symtab.t)
 (stack_index : int) (left : lisp_expression) (right : lisp_expression) : compile_result = (
   match compile_non_tail definitions symbol_table stack_index left with
+  | Error -> Error
+  | Correct left_directives -> (
+    match compile_non_tail definitions symbol_table (stack_index - 8) right with
     | Error -> Error
-    | Correct left_directives -> (
-      match compile_non_tail definitions symbol_table (stack_index - 8) right with
-      | Error -> Error
-      | Correct right_directives ->
-          let left_memory_address = stack_address stack_index in
-          Correct (
-            left_directives @
-            [Mov (MemReg (left_memory_address, Rax))] @
-            right_directives @
-            [
-              Mov (RegMem (R8, left_memory_address));
-              Mov (MemReg (Reg Rdi, R8));
-              Mov (MemReg (RegImm (Rdi, 8), Rax));
-              Mov (RegReg (Rax, Rdi));
-              Or (RegImm (Rax, pair_spec.tag));
-              Add (RegImm (Rdi, 16))
-            ]
-          )
+    | Correct right_directives -> (
+      let left_memory_address = stack_address stack_index in
+      Correct (
+        left_directives @
+        [Mov (MemReg (left_memory_address, Rax))] @
+        right_directives @
+        [
+          Mov (RegMem (R8, left_memory_address));
+          Mov (MemReg (Reg Rdi, R8));
+          Mov (MemReg (RegImm (Rdi, 8), Rax));
+          Mov (RegReg (Rax, Rdi));
+          Or (RegImm (Rax, pair_spec.tag));
+          Add (RegImm (Rdi, 16))
+        ]
+      )
     )
+  )
 )
 and compile_left (definitions : definition Symtab.t) (symbol_table : int Symtab.t)
 (stack_index : int) (arg : lisp_expression) : compile_result = (
@@ -413,7 +428,10 @@ let rec compile_tail (definitions : definition Symtab.t) (symbol_table : int Sym
           | Error -> Error
           | Correct alternative_directives -> Correct (
             conditional_directives @
-            [Cmp (RegImm (Rax, encode_bool false)); Jz else_label] @
+            [
+              Cmp (RegImm (Rax, encode_bool false));
+              Jz else_label
+            ] @
             consequent_directives @
             [Label else_label] @
             alternative_directives
@@ -493,19 +511,19 @@ let rec compile_tail (definitions : definition Symtab.t) (symbol_table : int Sym
   | Do {first; last} -> (
       let compiled_first_result = (
         List.fold_left
-        (
-          fun result arg -> (
-            match result with
-            | Error -> Error
-            | Correct directives -> (
-              match compile_non_tail definitions symbol_table stack_index arg with
+          (
+            fun result arg -> (
+              match result with
               | Error -> Error
-              | Correct arg_directives -> Correct (directives @ arg_directives)
+              | Correct directives -> (
+                match compile_non_tail definitions symbol_table stack_index arg with
+                | Error -> Error
+                | Correct arg_directives -> Correct (directives @ arg_directives)
+              )
             )
           )
-        )
-        (Correct [])
-        first
+          (Correct [])
+          first
       ) in
       match compiled_first_result with
       | Error -> Error
@@ -615,20 +633,20 @@ let compile (program : program) : compile_result = (
 
 let run (program : program) : string = (
   match compile program with
-  | Error -> failwith todo
+  | Error -> "Compilation failed"
   | Correct directives ->
-      let assembly =
-        directives
-        |> List.map directive_to_string
-        |> String.concat "\n"
-      in
-      let file = open_out "program.s" in
-      output_string file assembly ;
-      close_out file ;
-      ignore (Unix.system "nasm program.s -f elf64 -o program.o") ;
-      ignore (Unix.system "gcc program.o runtime.o -o program -z noexecstack") ;
-      let inp = Unix.open_process_in "./program" in
-      let r = input_line inp in
-      close_in inp ;
-      r
+    let assembly =
+      directives
+      |> List.map directive_to_string
+      |> String.concat "\n"
+    in
+    let file = open_out "program.s" in
+    output_string file assembly ;
+    close_out file ;
+    ignore (Unix.system "nasm program.s -f elf64 -o program.o") ;
+    ignore (Unix.system "gcc program.o runtime.o -o program -z noexecstack") ;
+    let program_output_channel = Unix.open_process_in "./program" in
+    let program_output = input_line program_output_channel in
+    close_in program_output_channel ;
+    program_output
 )
